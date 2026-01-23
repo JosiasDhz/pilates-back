@@ -38,6 +38,11 @@ export class UsersController {
     return this.usersService.findWithFolio();
   }
 
+  @Get('/stats')
+  getStats() {
+    return this.usersService.getStats();
+  }
+
   @Get(':id')
   @Auth(ValidRoles.admin)
   findOne(@Param('id') id: string, @GetUser() user: User) {

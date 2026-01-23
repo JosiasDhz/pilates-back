@@ -256,4 +256,26 @@ export class UsersService {
 
     return users;
   }
+
+  async getStats() {
+    // Query SQL optimizada que obtiene todas las estadísticas en una sola consulta
+    const stats = await this.userRepository
+      .createQueryBuilder('user')
+      .select('COUNT(*)', 'total')
+      .addSelect(
+        'SUM(CASE WHEN user.status = true THEN 1 ELSE 0 END)',
+        'activos',
+      )
+      .addSelect(
+        'SUM(CASE WHEN user.status = false THEN 1 ELSE 0 END)',
+        'inactivos',
+      )
+      .getRawOne();
+
+    return {
+      total: parseInt(stats.total) || 0,
+      activos: parseInt(stats.activos) || 0,
+      inactivos: parseInt(stats.inactivos) || 0,
+    };
+  }
 }
