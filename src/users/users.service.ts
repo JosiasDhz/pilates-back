@@ -49,12 +49,15 @@ export class UsersService {
 
     if (!rol) throw new NotFoundException(`Rol con id ${rolId} no encontrado`);
 
-    const file = await this.fileRepository.findOneBy({ id: avatar });
-    if (!file)
-      throw new NotFoundException(`Archivo con id ${avatar} no encontrado`);
+    let file = null;
+    if (avatar) {
+      file = await this.fileRepository.findOneBy({ id: avatar });
+      if (!file)
+        throw new NotFoundException(`Archivo con id ${avatar} no encontrado`);
+    }
 
     data.password = bcrypt.hashSync(data.password, 10);
-    const user = this.userRepository.create({ ...data, rol, avatar: file });
+    const user = this.userRepository.create({ ...data, rol, ...(file && { avatar: file }) });
     await this.userRepository.save(user);
 
     delete user.password;
@@ -163,10 +166,18 @@ export class UsersService {
       },
     });
 
-    const image = await this.fileService.findOne(userFound.avatar.id);
-    userFound.avatar = image;
-
     if (!userFound) throw new NotFoundException('Usuario no encontrado');
+
+    // Solo obtener la imagen si el avatar existe
+    if (userFound.avatar?.id) {
+      try {
+        const image = await this.fileService.findOne(userFound.avatar.id);
+        userFound.avatar = image;
+      } catch (error) {
+        // Si hay error al obtener la imagen, mantener el avatar como null
+        userFound.avatar = null;
+      }
+    }
 
     if (user.rol.name === 'Administrador') return userFound;
 

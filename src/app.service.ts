@@ -20,6 +20,7 @@ export class AppService implements OnApplicationBootstrap {
 
   async onApplicationBootstrap() {
     await this.createDefaultData();
+    await this.createInstructorRole();
   }
 
   private async createDefaultData() {
@@ -76,6 +77,29 @@ export class AppService implements OnApplicationBootstrap {
     });
 
     this.logger.log('Seed loaded');
+  }
+  private async createInstructorRole() {
+    const instructorRolFound = await this.rolRepository.findOne({
+      where: { name: 'Instructor' },
+    });
+  
+    if (instructorRolFound) {
+      this.logger.log('Instructor role already exists');
+      return instructorRolFound;
+    }
+  
+    const instructorRol = await this.rolRepository.save({
+      name: 'Instructor',
+      description: 'Personal docente con acceso a gestión de cursos y alumnos',
+      permissions: [
+        '/dashboard/instructor/courses',
+        '/dashboard/instructor/students',
+        '/dashboard/instructor/reports',
+      ],
+    });
+  
+    this.logger.log('Instructor role created successfully');
+    return instructorRol;
   }
 
 }

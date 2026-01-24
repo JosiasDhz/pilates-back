@@ -9,6 +9,14 @@ import { CommonModule } from './common/common.module';
 import { AppService } from './app.service';
 import { FilesModule } from './files/files.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { AspirantesModule } from './aspirantes/aspirantes.module';
+import { PaymentMethodsModule } from './payment-methods/payment-methods.module';
+import { PaymentsModule } from './payments/payments.module';
+import { PaymentAdminModule } from './payment-admin/payment-admin.module';
+import { InstructorsModule } from './instructors/instructors.module';
+import { EmployeeModule } from './employee/employee.module';
+import { StudiosModule } from './studios/studios.module';
+import { CalendarModule } from './calendar/calendar.module';
 
 @Module({
   imports: [
@@ -30,6 +38,14 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     CommonModule,
     FilesModule,
     WhatsappModule,
+    AspirantesModule,
+    PaymentMethodsModule,
+    PaymentsModule,
+    PaymentAdminModule,
+    InstructorsModule,
+    EmployeeModule,
+    StudiosModule,
+    CalendarModule,
   ],
   controllers: [],
   providers: [AppService],
