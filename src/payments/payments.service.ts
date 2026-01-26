@@ -42,12 +42,15 @@ export class PaymentsService {
    * Crea un pago manual con código de referencia único
    */
   async createManualPayment(createPaymentDto: CreatePaymentDto): Promise<Payment> {
-    // Verificar que el usuario existe
-    const user = await this.userRepository.findOne({
-      where: { id: createPaymentDto.userId },
-    });
-    if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
+    // Verificar que el usuario existe si se proporciona userId
+    let user: User | null = null;
+    if (createPaymentDto.userId) {
+      user = await this.userRepository.findOne({
+        where: { id: createPaymentDto.userId },
+      });
+      if (!user) {
+        throw new NotFoundException('Usuario no encontrado');
+      }
     }
 
     // Verificar que el método de pago existe
@@ -87,7 +90,8 @@ export class PaymentsService {
       currency: createPaymentDto.currency || 'MXN',
       status: PaymentStatus.PENDING,
       referenceCode,
-      userId: createPaymentDto.userId,
+      userId: createPaymentDto.userId || null,
+      aspirantId: createPaymentDto.aspirantId || null,
       paymentMethodId: createPaymentDto.paymentMethodId,
     });
 
@@ -101,6 +105,17 @@ export class PaymentsService {
     paymentId: string,
     file: Express.Multer.File,
   ): Promise<PaymentEvidence> {
+    console.log('=== UPLOAD EVIDENCE ===');
+    console.log('PaymentId:', paymentId);
+    console.log('File recibido:', file ? {
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+      fieldname: file.fieldname,
+      hasBuffer: !!file.buffer,
+      bufferLength: file.buffer?.length,
+    } : 'NO HAY ARCHIVO');
+
     // Verificar que el pago existe
     const payment = await this.paymentRepository.findOne({
       where: { id: paymentId },
@@ -108,18 +123,34 @@ export class PaymentsService {
     });
 
     if (!payment) {
+      console.error('❌ Pago no encontrado:', paymentId);
       throw new NotFoundException('Pago no encontrado');
     }
 
+    console.log('Payment encontrado:', {
+      id: payment.id,
+      status: payment.status,
+      amountCents: payment.amountCents.toString(),
+    });
+
     // Verificar que el pago está en estado PENDING
     if (payment.status !== PaymentStatus.PENDING) {
+      console.error('❌ Pago no está en estado PENDING:', payment.status);
       throw new BadRequestException(
         `No se puede subir evidencia. El pago está en estado: ${payment.status}`,
       );
     }
 
+    // Verificar que el archivo tiene buffer
+    if (!file.buffer) {
+      console.error('❌ Archivo no tiene buffer');
+      throw new BadRequestException('El archivo no tiene contenido (buffer)');
+    }
+
+    console.log('Subiendo archivo a S3...');
     // Subir el archivo usando FilesService
     const uploadedFile = await this.filesService.uploadFile(file);
+    console.log('✅ Archivo subido a S3:', uploadedFile.id);
 
     // Crear el registro de evidencia
     const evidence = this.paymentEvidenceRepository.create({
@@ -128,11 +159,15 @@ export class PaymentsService {
       uploadedAt: new Date(),
     });
 
+    console.log('Guardando evidencia en BD...');
     const savedEvidence = await this.paymentEvidenceRepository.save(evidence);
+    console.log('✅ Evidencia guardada:', savedEvidence.id);
 
     // Cambiar el estado del pago a UNDER_REVIEW
     payment.status = PaymentStatus.UNDER_REVIEW;
     await this.paymentRepository.save(payment);
+    console.log('✅ Estado del pago actualizado a UNDER_REVIEW');
+    console.log('======================');
 
     return savedEvidence;
   }

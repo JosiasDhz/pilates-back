@@ -17,6 +17,11 @@ import { InstructorsModule } from './instructors/instructors.module';
 import { EmployeeModule } from './employee/employee.module';
 import { StudiosModule } from './studios/studios.module';
 import { CalendarModule } from './calendar/calendar.module';
+import { ConfigurationsModule } from './configurations/configurations.module';
+import { AspirantMedicalHistoryModule } from './aspirant-medical-history/aspirant-medical-history.module';
+import { AspirantStatusModule } from './aspirant-status/aspirant-status.module';
+import { AspirantStatus } from './aspirant-status/entities/aspirant-status.entity';
+import { PaymentMethod } from './payment-methods/entities/payment-method.entity';
 
 @Module({
   imports: [
@@ -32,6 +37,7 @@ import { CalendarModule } from './calendar/calendar.module';
       synchronize: process.env.DB_SYNCHRONIZE === 'true',
       dropSchema: process.env.DB_DROP_SCHEMA === 'true',
     }),
+    TypeOrmModule.forFeature([AspirantStatus, PaymentMethod]),
     AuthModule,
     UsersModule,
     RolsModule,
@@ -46,6 +52,9 @@ import { CalendarModule } from './calendar/calendar.module';
     EmployeeModule,
     StudiosModule,
     CalendarModule,
+    ConfigurationsModule,
+    AspirantMedicalHistoryModule,
+    AspirantStatusModule,
   ],
   controllers: [],
   providers: [AppService],

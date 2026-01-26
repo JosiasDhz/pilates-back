@@ -12,6 +12,7 @@ import {
 import { User } from 'src/users/entities/user.entity';
 import { PaymentMethod } from 'src/payment-methods/entities/payment-method.entity';
 import { PaymentEvidence } from './payment-evidence.entity';
+import { Aspirante } from 'src/aspirantes/entities/aspirante.entity';
 
 export enum PaymentStatus {
   PENDING = 'PENDING',
@@ -51,12 +52,19 @@ export class Payment {
   @Column({ type: 'timestamptz', nullable: true })
   verifiedAt: Date;
 
-  @ManyToOne(() => User, { nullable: false })
+  @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'userId' })
   user: User;
 
-  @Column({ type: 'uuid' })
-  userId: string;
+  @Column({ type: 'uuid', nullable: true })
+  userId: string | null;
+
+  @ManyToOne(() => Aspirante, { nullable: true })
+  @JoinColumn({ name: 'aspirantId' })
+  aspirant: Aspirante;
+
+  @Column({ type: 'uuid', nullable: true })
+  aspirantId: string | null;
 
   @ManyToOne(() => PaymentMethod, { nullable: false, eager: true })
   @JoinColumn({ name: 'paymentMethodId' })

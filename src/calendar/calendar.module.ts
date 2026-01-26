@@ -12,6 +12,6 @@ import { CalendarController } from './calendar.controller';
   ],
   controllers: [CalendarController],
   providers: [CalendarService],
-  exports: [CalendarService],
+  exports: [CalendarService, TypeOrmModule],
 })
 export class CalendarModule {}

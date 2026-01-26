@@ -22,7 +22,7 @@ export class WhatsappService {
   }
 
   async sendMessage(data: MessageInterface) {
-    const url = `https://graph.facebook.com/v18.0/${this.phoneNumberId}/messages`;
+    const url = `https://graph.facebook.com/v22.0/${this.phoneNumberId}/messages`;
     const headers = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${this.WHATSAPP_TOKEN}`,
@@ -58,16 +58,31 @@ export class WhatsappService {
     };
 
     try {
+      this.logger.log('Enviando mensaje de WhatsApp:', JSON.stringify({ to: data.to, type: data?.flowId ? 'interactive' : 'template' }, null, 2));
+      this.logger.log('Body completo:', JSON.stringify(body, null, 2));
+      
       const response = await fetch(url, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify(body),
       });
+      
       const responseData = await response.json();
-
+      
+      if (!response.ok) {
+        this.logger.error('Error en respuesta de WhatsApp API:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: responseData,
+        });
+        throw new Error(responseData.error?.message || `WhatsApp API error: ${response.status}`);
+      }
+      
+      this.logger.log('✅ Mensaje de WhatsApp enviado exitosamente:', responseData);
       return responseData;
     } catch (error) {
       this.logger.error('Error sending WhatsApp message:', error);
+      throw error;
     }
   }
 
@@ -130,6 +145,52 @@ Politica de privacidad: https://www.contagramm.com/politica-privacidad
       to: whatsappPhone,
       template: confirmRegisterTemplate(folio),
     });
+  }
+
+  async sendTextMessage(to: string, message: string) {
+    const url = `https://graph.facebook.com/v22.0/${this.phoneNumberId}/messages`;
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${this.WHATSAPP_TOKEN}`,
+    };
+
+    const body = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: to,
+      type: 'text',
+      text: {
+        preview_url: false,
+        body: message,
+      },
+    };
+
+    try {
+      this.logger.log('Enviando mensaje de texto de WhatsApp:', JSON.stringify({ to, messageLength: message.length }, null, 2));
+      this.logger.log('Body completo:', JSON.stringify(body, null, 2));
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(body),
+      });
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        this.logger.error('Error en respuesta de WhatsApp API (text message):', {
+          status: response.status,
+          statusText: response.statusText,
+          error: responseData,
+        });
+        throw new Error(responseData.error?.message || 'Failed to send message');
+      }
+
+      this.logger.log('✅ Mensaje de texto de WhatsApp enviado exitosamente:', responseData);
+      return responseData;
+    } catch (error) {
+      this.logger.error('Error sending WhatsApp text message:', error);
+      throw error;
+    }
   }
 
   private async generateFolio() {

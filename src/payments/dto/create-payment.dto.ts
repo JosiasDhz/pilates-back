@@ -10,7 +10,12 @@ export class CreatePaymentDto {
   currency?: string;
 
   @IsUUID()
-  userId: string;
+  @IsOptional()
+  userId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  aspirantId?: string;
 
   @IsNumber()
   paymentMethodId: number;

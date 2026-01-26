@@ -10,6 +10,7 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
+import { SendMessageDto } from './dto/send-message.dto';
 
 @Controller('whatsapp')
 export class WhatsappController {
@@ -58,5 +59,27 @@ export class WhatsappController {
     return {
       message: 'version 1.0.1',
     };
+  }
+
+  @Post('send')
+  async sendMessage(@Body() sendMessageDto: SendMessageDto) {
+    try {
+      const result = await this.whatsappService.sendTextMessage(
+        sendMessageDto.to,
+        sendMessageDto.message,
+      );
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message || 'Error al enviar el mensaje',
+        },
+        500,
+      );
+    }
   }
 }

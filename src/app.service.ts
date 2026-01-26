@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './users/entities/user.entity';
 import { Repository } from 'typeorm';
 import { Rol } from './rols/entities/rol.entity';
+import { AspirantStatus } from './aspirant-status/entities/aspirant-status.entity';
+import { PaymentMethod } from './payment-methods/entities/payment-method.entity';
 import * as bcrypt from 'bcrypt';
 import { faker } from '@faker-js/faker';
 
@@ -16,11 +18,19 @@ export class AppService implements OnApplicationBootstrap {
 
     @InjectRepository(Rol)
     private readonly rolRepository: Repository<Rol>,
+
+    @InjectRepository(AspirantStatus)
+    private readonly aspirantStatusRepository: Repository<AspirantStatus>,
+
+    @InjectRepository(PaymentMethod)
+    private readonly paymentMethodRepository: Repository<PaymentMethod>,
   ) {}
 
   async onApplicationBootstrap() {
     await this.createDefaultData();
     await this.createInstructorRole();
+    await this.createDefaultAspirantStatuses();
+    await this.createDefaultPaymentMethods();
   }
 
   private async createDefaultData() {
@@ -100,6 +110,63 @@ export class AppService implements OnApplicationBootstrap {
   
     this.logger.log('Instructor role created successfully');
     return instructorRol;
+  }
+
+  private async createDefaultAspirantStatuses() {
+    const defaultStatuses = [
+      { name: 'Pendiente', code: 'PENDING', description: 'Aspirante en proceso de evaluación' },
+      { name: 'Convertido', code: 'CONVERTED', description: 'Aspirante convertido a estudiante' },
+      { name: 'Rechazado', code: 'REJECTED', description: 'Aspirante rechazado' },
+    ];
+
+    for (const statusData of defaultStatuses) {
+      const existing = await this.aspirantStatusRepository.findOne({
+        where: { code: statusData.code },
+      });
+
+      if (!existing) {
+        await this.aspirantStatusRepository.save(statusData);
+        this.logger.log(`Aspirant status ${statusData.code} created`);
+      }
+    }
+
+    this.logger.log('Default aspirant statuses initialized');
+  }
+
+  private async createDefaultPaymentMethods() {
+    const defaultPaymentMethods = [
+      {
+        name: 'Efectivo',
+        type: 'MANUAL' as const,
+        requiresEvidence: false,
+        instructions: 'Lleva el monto acordado a la sucursal el día de tu cita.',
+        status: true,
+      },
+      {
+        name: 'Transferencia Bancaria',
+        type: 'MANUAL' as const,
+        requiresEvidence: true,
+        instructions: `NOMBRE: Marcela Paulina Hernández Álvarez
+Banco: INBURSA
+CUENTA: 50054020321
+Tarjeta: 4658 2859 1519 4371
+CLABE: 036610500540203218`,
+        status: true,
+      },
+    ];
+
+    for (const methodData of defaultPaymentMethods) {
+      const existing = await this.paymentMethodRepository.findOne({
+        where: { name: methodData.name },
+      });
+
+      if (!existing) {
+        await this.paymentMethodRepository.save(methodData);
+        this.logger.log(`Payment method ${methodData.name} created`);
+      }
+    }
+
+    this.logger.log('Default payment methods initialized');
   }
 
 }

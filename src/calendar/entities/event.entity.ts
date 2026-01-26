@@ -3,12 +3,14 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { Studio } from 'src/studios/entities/studio.entity';
 import { Instructor } from 'src/instructors/entities/instructor.entity';
+import { Aspirante } from 'src/aspirantes/entities/aspirante.entity';
 
 export type EventType =
   | 'valoracion'
@@ -58,6 +60,9 @@ export class Event {
   @ManyToOne(() => Instructor, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'instructorId' })
   instructor: Instructor | null;
+
+  @OneToMany(() => Aspirante, (aspirant) => aspirant.valoracionEvent)
+  aspirants: Aspirante[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
