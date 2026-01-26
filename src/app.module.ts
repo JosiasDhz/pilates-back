@@ -22,21 +22,12 @@ import { AspirantMedicalHistoryModule } from './aspirant-medical-history/aspiran
 import { AspirantStatusModule } from './aspirant-status/aspirant-status.module';
 import { AspirantStatus } from './aspirant-status/entities/aspirant-status.entity';
 import { PaymentMethod } from './payment-methods/entities/payment-method.entity';
+import { getTypeOrmConfig } from './typeorm.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot(),
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      host: process.env.DB_HOST,
-      port: +process.env.DB_PORT,
-      database: process.env.DB_NAME,
-      username: process.env.DB_USERNAME,
-      password: process.env.DB_PASSWORD,
-      autoLoadEntities: true,
-      synchronize: process.env.DB_SYNCHRONIZE === 'true',
-      dropSchema: process.env.DB_DROP_SCHEMA === 'true',
-    }),
+    TypeOrmModule.forRoot(getTypeOrmConfig()),
     TypeOrmModule.forFeature([AspirantStatus, PaymentMethod]),
     AuthModule,
     UsersModule,
