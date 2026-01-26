@@ -6,26 +6,39 @@ export class AspirantRegistrationMessage {
   public readonly fechaFormateada: string;
   public readonly hora: string;
   public readonly estudioNombre: string;
+  public readonly evidenceLink?: string;
 
-  constructor(aspirant: Aspirante, valoracionEvent: Event) {
+  constructor(aspirant: Aspirante, valoracionEvent: Event, evidenceLink?: string) {
     this.firstName = aspirant.firstName;
     this.fechaFormateada = this.formatDate(valoracionEvent.date);
     this.hora = valoracionEvent.time;
     this.estudioNombre = valoracionEvent.location || 'Estudio';
+    this.evidenceLink = evidenceLink;
   }
 
   build(): string {
-    return `¡Hola ${this.firstName}! 👋
+    let message = `¡Hola ${this.firstName}! 👋
 
 ✅ Tu registro de valoración ha sido confirmado:
 
 📅 Fecha: ${this.fechaFormateada}
 🕐 Hora: ${this.hora}
-📍 Estudio: ${this.estudioNombre}
+📍 Estudio: ${this.estudioNombre}`;
+
+    if (this.evidenceLink) {
+      message += `
+
+📎 Para subir tu comprobante de pago, usa este enlace:
+${this.evidenceLink}`;
+    }
+
+    message += `
 
 Te esperamos en tu clase de valoración. Si tienes alguna pregunta, no dudes en contactarnos.
 
 ¡Nos vemos pronto! 🧘‍♀️`;
+
+    return message;
   }
 
   private formatDate(date: string | Date): string {

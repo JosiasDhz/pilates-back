@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { Payment, PaymentStatus } from './entities/payment.entity';
 import { PaymentEvidence } from './entities/payment-evidence.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { FilesService } from 'src/files/files.service';
 import { User } from 'src/users/entities/user.entity';
 import { PaymentMethod } from 'src/payment-methods/entities/payment-method.entity';
@@ -84,9 +85,17 @@ export class PaymentsService {
       );
     }
 
+    // Asegurar que amountCents esté en centavos
+    // Si el valor es menor a 1000, asumimos que viene en pesos y lo convertimos a centavos
+    let amountCents = createPaymentDto.amountCents;
+    if (amountCents < 1000) {
+      // Probablemente viene en pesos, convertir a centavos
+      amountCents = amountCents * 100;
+    }
+
     // Crear el pago
     const payment = this.paymentRepository.create({
-      amountCents: BigInt(createPaymentDto.amountCents),
+      amountCents: BigInt(amountCents),
       currency: createPaymentDto.currency || 'MXN',
       status: PaymentStatus.PENDING,
       referenceCode,
@@ -95,7 +104,12 @@ export class PaymentsService {
       paymentMethodId: createPaymentDto.paymentMethodId,
     });
 
-    return await this.paymentRepository.save(payment);
+    const saved = await this.paymentRepository.save(payment);
+    // Devolver con amountCents como string para serialización JSON
+    return {
+      ...saved,
+      amountCents: saved.amountCents.toString(),
+    } as any;
   }
 
   /**
@@ -178,14 +192,18 @@ export class PaymentsService {
   async findOne(id: string): Promise<Payment> {
     const payment = await this.paymentRepository.findOne({
       where: { id },
-      relations: ['user', 'paymentMethod', 'evidences', 'evidences.file'],
+      relations: ['user', 'aspirant', 'paymentMethod', 'evidences', 'evidences.file'],
     });
 
     if (!payment) {
       throw new NotFoundException('Pago no encontrado');
     }
 
-    return payment;
+    // Transformar bigint a string para serialización JSON
+    return {
+      ...payment,
+      amountCents: payment.amountCents.toString(),
+    } as any;
   }
 
   /**
@@ -203,14 +221,16 @@ export class PaymentsService {
     const query = this.paymentRepository
       .createQueryBuilder('payment')
       .leftJoinAndSelect('payment.user', 'user')
+      .leftJoinAndSelect('payment.aspirant', 'aspirant')
       .leftJoinAndSelect('payment.paymentMethod', 'paymentMethod')
       .leftJoinAndSelect('payment.evidences', 'evidences')
+      .leftJoinAndSelect('evidences.file', 'evidenceFile')
       .take(limit)
       .skip(offset);
 
     if (search.trim() !== '') {
       query.andWhere(
-        '(user.name ILIKE :search OR user.email ILIKE :search OR payment.referenceCode ILIKE :search)',
+        '(user.name ILIKE :search OR user.email ILIKE :search OR aspirant.firstName ILIKE :search OR aspirant.lastNamePaternal ILIKE :search OR aspirant.email ILIKE :search OR payment.referenceCode ILIKE :search)',
         { search: `%${search.trim()}%` },
       );
     }
@@ -236,9 +256,170 @@ export class PaymentsService {
 
     const [records, total] = await query.getManyAndCount();
 
+    // Transformar bigint a string para serialización JSON
+    const transformedRecords = records.map((payment) => ({
+      ...payment,
+      amountCents: payment.amountCents.toString(),
+    }));
+
     return {
-      records,
+      records: transformedRecords,
       total,
     };
+  }
+
+  /**
+   * Encuentra todos los pagos de un aspirante
+   */
+  async findByAspirantId(aspirantId: string): Promise<Payment[]> {
+    return await this.paymentRepository.find({
+      where: { aspirantId },
+      relations: ['evidences', 'evidences.file', 'paymentMethod'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Agrega evidencia a un pago usando un fileId existente
+   */
+  async addEvidenceToPayment(
+    paymentId: string,
+    fileId: string,
+  ): Promise<PaymentEvidence> {
+    // No cargar relaciones para evitar problemas con cascade
+    const payment = await this.paymentRepository.findOne({
+      where: { id: paymentId },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Pago no encontrado');
+    }
+
+    if (payment.status !== PaymentStatus.PENDING) {
+      throw new BadRequestException(
+        `No se puede agregar evidencia. El pago está en estado: ${payment.status}`,
+      );
+    }
+
+    // Crear el registro de evidencia usando insert directo
+    const insertResult = await this.paymentEvidenceRepository.insert({
+      paymentId: payment.id,
+      fileId,
+      uploadedAt: new Date(),
+    });
+
+    // Obtener la evidencia creada
+    const savedEvidence = await this.paymentEvidenceRepository.findOne({
+      where: { id: insertResult.identifiers[0].id },
+      relations: ['payment', 'file'],
+    });
+
+    if (!savedEvidence) {
+      throw new Error('Error al crear la evidencia de pago');
+    }
+
+    // Cambiar el estado del pago a UNDER_REVIEW usando update directo
+    // Esto evita que TypeORM procese las relaciones con cascade
+    await this.paymentRepository.update(
+      { id: paymentId },
+      { status: PaymentStatus.UNDER_REVIEW },
+    );
+
+    return savedEvidence;
+  }
+
+  /**
+   * Actualiza un pago (principalmente el status)
+   */
+  async update(id: string, updatePaymentDto: UpdatePaymentDto): Promise<Payment> {
+    const payment = await this.paymentRepository.findOne({
+      where: { id },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Pago no encontrado');
+    }
+
+    // Actualizar el status si se proporciona
+    if (updatePaymentDto.status !== undefined) {
+      payment.status = updatePaymentDto.status;
+      
+      // Si el status cambia a COMPLETED, establecer verifiedAt
+      if (updatePaymentDto.status === PaymentStatus.COMPLETED && !payment.verifiedAt) {
+        payment.verifiedAt = new Date();
+      }
+      
+      // Si el status cambia de COMPLETED a otro, limpiar verifiedAt
+      if (updatePaymentDto.status !== PaymentStatus.COMPLETED && payment.verifiedAt) {
+        payment.verifiedAt = null;
+      }
+    }
+
+    const updatedPayment = await this.paymentRepository.save(payment);
+
+    // Transformar bigint a string para serialización JSON
+    return {
+      ...updatedPayment,
+      amountCents: updatedPayment.amountCents.toString(),
+    } as any;
+  }
+
+  /**
+   * Actualiza el status del pago más reciente de un aspirante
+   */
+  async getLatestPaymentByAspirantId(aspirantId: string): Promise<Payment | null> {
+    const payment = await this.paymentRepository.findOne({
+      where: { aspirantId },
+      relations: ['evidences', 'evidences.file', 'paymentMethod', 'user', 'aspirant'],
+      order: { createdAt: 'DESC' },
+    });
+
+    if (!payment) {
+      return null;
+    }
+
+    // Transformar bigint a string para serialización JSON
+    return {
+      ...payment,
+      amountCents: payment.amountCents.toString(),
+    } as any;
+  }
+
+  async updateAspirantPaymentStatus(
+    aspirantId: string,
+    updatePaymentDto: UpdatePaymentDto,
+  ): Promise<Payment> {
+    // Buscar el pago más reciente del aspirante
+    const payment = await this.paymentRepository.findOne({
+      where: { aspirantId },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('No se encontró ningún pago para este aspirante');
+    }
+
+    // Actualizar el status si se proporciona
+    if (updatePaymentDto.status !== undefined) {
+      payment.status = updatePaymentDto.status;
+      
+      // Si el status cambia a COMPLETED, establecer verifiedAt
+      if (updatePaymentDto.status === PaymentStatus.COMPLETED && !payment.verifiedAt) {
+        payment.verifiedAt = new Date();
+      }
+      
+      // Si el status cambia de COMPLETED a otro, limpiar verifiedAt
+      if (updatePaymentDto.status !== PaymentStatus.COMPLETED && payment.verifiedAt) {
+        payment.verifiedAt = null;
+      }
+    }
+
+    const updatedPayment = await this.paymentRepository.save(payment);
+
+    // Transformar bigint a string para serialización JSON
+    return {
+      ...updatedPayment,
+      amountCents: updatedPayment.amountCents.toString(),
+    } as any;
   }
 }

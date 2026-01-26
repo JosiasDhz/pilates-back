@@ -13,10 +13,30 @@ import { CalendarModule } from 'src/calendar/calendar.module';
 import { PaymentsModule } from 'src/payments/payments.module';
 import { ConfigurationsModule } from 'src/configurations/configurations.module';
 import { WhatsappModule } from 'src/whatsapp/whatsapp.module';
+import { AspirantAccessTokenModule } from 'src/aspirant-access-token/aspirant-access-token.module';
+import { AspirantPhysicalRecord } from 'src/aspirant-physical-record/entities/aspirant-physical-record.entity';
+import { AspirantAssessmentPhoto } from 'src/aspirant-assessment-photo/entities/aspirant-assessment-photo.entity';
+import { User } from 'src/users/entities/user.entity';
+import { Rol } from 'src/rols/entities/rol.entity';
+import { File } from 'src/files/entities/file.entity';
+import { Student } from 'src/students/entities/student.entity';
+import { StudentStatusHistory } from 'src/students/entities/student-status-history.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Aspirante, PaymentMethod, AspirantStatus, Event]),
+    TypeOrmModule.forFeature([
+      Aspirante,
+      PaymentMethod,
+      AspirantStatus,
+      Event,
+      AspirantPhysicalRecord,
+      AspirantAssessmentPhoto,
+      User,
+      Rol,
+      File,
+      Student,
+      StudentStatusHistory,
+    ]),
     forwardRef(() => AspirantMedicalHistoryModule),
     PaymentMethodsModule,
     AspirantStatusModule,
@@ -24,6 +44,7 @@ import { WhatsappModule } from 'src/whatsapp/whatsapp.module';
     PaymentsModule,
     ConfigurationsModule,
     WhatsappModule,
+    AspirantAccessTokenModule,
   ],
   controllers: [AspirantesController],
   providers: [AspirantesService],

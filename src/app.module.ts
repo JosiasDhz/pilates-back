@@ -20,15 +20,20 @@ import { CalendarModule } from './calendar/calendar.module';
 import { ConfigurationsModule } from './configurations/configurations.module';
 import { AspirantMedicalHistoryModule } from './aspirant-medical-history/aspirant-medical-history.module';
 import { AspirantStatusModule } from './aspirant-status/aspirant-status.module';
+import { AspirantAccessTokenModule } from './aspirant-access-token/aspirant-access-token.module';
 import { AspirantStatus } from './aspirant-status/entities/aspirant-status.entity';
 import { PaymentMethod } from './payment-methods/entities/payment-method.entity';
+import { Studio } from './studios/entities/studio.entity';
 import { getTypeOrmConfig } from './typeorm.config';
+import { AspirantPhysicalRecordModule } from './aspirant-physical-record/aspirant-physical-record.module';
+import { AspirantAssessmentPhotoModule } from './aspirant-assessment-photo/aspirant-assessment-photo.module';
+import { StudentsModule } from './students/students.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot(),
     TypeOrmModule.forRoot(getTypeOrmConfig()),
-    TypeOrmModule.forFeature([AspirantStatus, PaymentMethod]),
+    TypeOrmModule.forFeature([AspirantStatus, PaymentMethod, Studio]),
     AuthModule,
     UsersModule,
     RolsModule,
@@ -46,6 +51,10 @@ import { getTypeOrmConfig } from './typeorm.config';
     ConfigurationsModule,
     AspirantMedicalHistoryModule,
     AspirantStatusModule,
+    AspirantAccessTokenModule,
+    AspirantPhysicalRecordModule,
+    AspirantAssessmentPhotoModule,
+    StudentsModule,
   ],
   controllers: [],
   providers: [AppService],

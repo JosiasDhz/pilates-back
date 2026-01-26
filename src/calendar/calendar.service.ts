@@ -115,6 +115,12 @@ export class CalendarService {
       .orderBy('event.date', 'ASC')
       .addOrderBy('event.time', 'ASC');
 
+    // Si es tipo valoracion, incluir los aspirantes relacionados
+    if (type === 'valoracion') {
+      qb.leftJoinAndSelect('event.aspirants', 'aspirant')
+        .leftJoinAndSelect('aspirant.avatar', 'aspirantAvatar');
+    }
+
     if (month != null && year != null) {
       const startStr = `${year}-${String(month).padStart(2, '0')}-01`;
       const lastDay = new Date(year, month, 0).getDate();

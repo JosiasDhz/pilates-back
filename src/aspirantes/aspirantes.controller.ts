@@ -16,6 +16,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { AspirantesService } from './aspirantes.service';
 import { CreateAspiranteDto } from './dto/create-aspirante.dto';
 import { UpdateAspiranteDto } from './dto/update-aspirante.dto';
+import { SaveAssessmentDto } from './dto/save-assessment.dto';
 
 @Controller('aspirantes')
 export class AspirantesController {
@@ -97,6 +98,7 @@ export class AspirantesController {
     @Query('sort') sort?: string,
     @Query('order') order?: 'ASC' | 'DESC',
     @Query('search') search?: string,
+    @Query('statusId') statusId?: string,
   ) {
     return this.aspirantesService.findAll(
       limit ? parseInt(limit, 10) : 10,
@@ -104,6 +106,7 @@ export class AspirantesController {
       sort || 'createdAt',
       order || 'DESC',
       search || '',
+      statusId,
     );
   }
 
@@ -133,6 +136,27 @@ export class AspirantesController {
     @Body() updateAspiranteDto: UpdateAspiranteDto,
   ) {
     return this.aspirantesService.update(id, updateAspiranteDto);
+  }
+
+  @Post(':id/save-assessment')
+  @UsePipes(new ValidationPipe({ 
+    whitelist: true, 
+    forbidNonWhitelisted: true,
+    transform: true,
+    transformOptions: {
+      enableImplicitConversion: true,
+    },
+  }))
+  saveAssessment(
+    @Param('id') id: string,
+    @Body() saveAssessmentDto: SaveAssessmentDto,
+  ) {
+    return this.aspirantesService.saveAssessment(id, saveAssessmentDto);
+  }
+
+  @Post(':id/promote-to-user')
+  promoteToUser(@Param('id') id: string) {
+    return this.aspirantesService.promoteToUser(id);
   }
 
   @Delete(':id')

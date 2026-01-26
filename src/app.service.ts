@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { Rol } from './rols/entities/rol.entity';
 import { AspirantStatus } from './aspirant-status/entities/aspirant-status.entity';
 import { PaymentMethod } from './payment-methods/entities/payment-method.entity';
+import { Studio } from './studios/entities/studio.entity';
 import * as bcrypt from 'bcrypt';
 import { faker } from '@faker-js/faker';
 
@@ -24,6 +25,9 @@ export class AppService implements OnApplicationBootstrap {
 
     @InjectRepository(PaymentMethod)
     private readonly paymentMethodRepository: Repository<PaymentMethod>,
+
+    @InjectRepository(Studio)
+    private readonly studioRepository: Repository<Studio>,
   ) {}
 
   async onApplicationBootstrap() {
@@ -31,6 +35,7 @@ export class AppService implements OnApplicationBootstrap {
     await this.createInstructorRole();
     await this.createDefaultAspirantStatuses();
     await this.createDefaultPaymentMethods();
+    await this.createDefaultStudios();
   }
 
   private async createDefaultData() {
@@ -47,43 +52,13 @@ export class AppService implements OnApplicationBootstrap {
       permissions: ['*'],
     });
 
-    const customerRol = await this.rolRepository.save({
-      name: 'Customer',
-      description: 'Customer role',
-      permissions: ['/dashboard/my-purchases', '/dashboard/my-purchases'],
-    });
-
-    const sellerRol = await this.rolRepository.save({
-      name: 'Seller',
-      description: 'Seller role',
-      permissions: ['/dashboard/my-sales', '/dashboard/my-commissions'],
-    });
-
     await this.userRepository.save({
-      name: 'Jairo Esteban',
-      lastName: 'Martinez',
-      secondLastName: 'Portillo',
+      name: 'Josias',
+      lastName: 'Dominguez',
+      secondLastName: 'Hernandez',
       email: 'admin@karimnot.com',
       password: bcrypt.hashSync('A1b2c3', 10),
       rol: adminRol,
-    });
-
-    await this.userRepository.save({
-      name: 'Pepe',
-      lastName: 'Pica',
-      secondLastName: 'Papas',
-      email: 'pepe@gmail.com',
-      password: bcrypt.hashSync('A1b2c3', 10),
-      rol: customerRol,
-    });
-
-    await this.userRepository.save({
-      name: 'Fulano',
-      lastName: 'Perengano',
-      secondLastName: 'Zutano',
-      email: 'fulanito@gmail.com',
-      password: bcrypt.hashSync('A1b2c3', 10),
-      rol: sellerRol,
     });
 
     this.logger.log('Seed loaded');
@@ -167,6 +142,44 @@ CLABE: 036610500540203218`,
     }
 
     this.logger.log('Default payment methods initialized');
+  }
+
+  private async createDefaultStudios() {
+    const defaultStudios = [
+      {
+        name: 'Reforma',
+        address: 'Av Belizario Domínguez #1310 A, COL. REFORMA',
+        phone: null,
+        capacity: 19,
+        capacityPrivate: 6,
+        capacitySemiprivate: 3,
+        status: true,
+      },
+      {
+        name: 'Brenamiel',
+        address: 'Av. Ferrocarril #100, COL. BRENAMIEL',
+        phone: null,
+        capacity: 0,
+        capacityPrivate: 0,
+        capacitySemiprivate: 0,
+        status: true,
+      },
+    ];
+
+    for (const studioData of defaultStudios) {
+      const existing = await this.studioRepository.findOne({
+        where: { name: studioData.name },
+      });
+
+      if (!existing) {
+        await this.studioRepository.save(studioData);
+        this.logger.log(`Studio ${studioData.name} created`);
+      } else {
+        this.logger.log(`Studio ${studioData.name} already exists`);
+      }
+    }
+
+    this.logger.log('Default studios initialized');
   }
 
 }

@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   OneToOne,
   ManyToOne,
+  OneToMany,
   BeforeInsert,
   BeforeUpdate,
   JoinColumn,
@@ -13,6 +14,9 @@ import { AspirantMedicalHistory } from 'src/aspirant-medical-history/entities/as
 import { PaymentMethod } from 'src/payment-methods/entities/payment-method.entity';
 import { AspirantStatus } from 'src/aspirant-status/entities/aspirant-status.entity';
 import { Event } from 'src/calendar/entities/event.entity';
+import { File } from 'src/files/entities/file.entity';
+import { AspirantPhysicalRecord } from 'src/aspirant-physical-record/entities/aspirant-physical-record.entity';
+import { AspirantAssessmentPhoto } from 'src/aspirant-assessment-photo/entities/aspirant-assessment-photo.entity';
 
 @Entity('aspirants')
 export class Aspirante {
@@ -70,6 +74,33 @@ export class Aspirante {
     { cascade: true, eager: false },
   )
   medicalHistory: AspirantMedicalHistory;
+
+  @ManyToOne(() => File, { nullable: true, eager: false })
+  @JoinColumn({ name: 'avatarId' })
+  avatar: File;
+
+  @Column({ type: 'uuid', nullable: true })
+  avatarId: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  assessmentComments: string;
+
+  @Column({ type: 'text', nullable: true })
+  assessmentNotes: string;
+
+  @OneToOne(
+    () => AspirantPhysicalRecord,
+    (physicalRecord) => physicalRecord.aspirant,
+    { cascade: true, eager: false },
+  )
+  physicalRecord: AspirantPhysicalRecord;
+
+  @OneToMany(
+    () => AspirantAssessmentPhoto,
+    (assessmentPhoto) => assessmentPhoto.aspirant,
+    { cascade: true, eager: false },
+  )
+  assessmentPhotos: AspirantAssessmentPhoto[];
 
   @BeforeInsert()
   @BeforeUpdate()

@@ -4,6 +4,7 @@ import {
   Post,
   Param,
   Delete,
+  Query,
   UseInterceptors,
   UploadedFile,
   BadRequestException,
@@ -25,9 +26,9 @@ export class FilesController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id') id: string, @Query('inline') inline?: string) {
     if (!isUUID(id)) throw new BadRequestException({ message: 'Invalid id' });
-    return this.filesService.findOne(id);
+    return this.filesService.findOne(id, inline === 'true');
   }
 
   @Delete(':id')

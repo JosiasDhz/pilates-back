@@ -15,6 +15,7 @@
  * 📅 Fecha: {{2}}
  * 🕐 Hora: {{3}}
  * 📍 Estudio: {{4}}
+ * {{5}}
  * 
  * Te esperamos en tu clase de valoración. Si tienes alguna pregunta, no dudes en contactarnos.
  * 
@@ -25,13 +26,42 @@
  * 2. Fecha formateada
  * 3. Hora
  * 4. Nombre del estudio
+ * 5. Link de evidencia (opcional, solo si requiere evidencia)
  */
 export const aspirantRegisterTemplate = (
   firstName: string,
   fecha: string,
   hora: string,
   estudio: string,
+  evidenceLink?: string,
 ) => {
+  const bodyParams = [
+    {
+      type: 'text',
+      text: firstName,
+    },
+    {
+      type: 'text',
+      text: fecha,
+    },
+    {
+      type: 'text',
+      text: hora,
+    },
+    {
+      type: 'text',
+      text: estudio,
+    },
+  ];
+
+  // Si hay link de evidencia, agregarlo como parámetro adicional
+  if (evidenceLink) {
+    bodyParams.push({
+      type: 'text',
+      text: `\n\n📎 Para subir tu comprobante de pago, usa este enlace:\n${evidenceLink}`,
+    });
+  }
+
   return {
     template: {
       name: 'registro_valoracion',
@@ -41,24 +71,7 @@ export const aspirantRegisterTemplate = (
       components: [
         {
           type: 'body',
-          parameters: [
-            {
-              type: 'text',
-              text: firstName,
-            },
-            {
-              type: 'text',
-              text: fecha,
-            },
-            {
-              type: 'text',
-              text: hora,
-            },
-            {
-              type: 'text',
-              text: estudio,
-            },
-          ],
+          parameters: bodyParams,
         },
       ],
     },

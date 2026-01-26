@@ -28,11 +28,19 @@ export class WhatsappService {
       Authorization: `Bearer ${this.WHATSAPP_TOKEN}`,
     };
 
+    // Determinar el tipo de mensaje
+    let messageType = 'template';
+    if (data?.flowId) {
+      messageType = 'interactive';
+    } else if (data?.interactive) {
+      messageType = 'interactive';
+    }
+
     const body = {
       recipient_type: 'individual',
       messaging_product: 'whatsapp',
       to: data.to,
-      type: data?.flowId ? 'interactive' : 'template',
+      type: messageType,
       ...(data.template && {
         ...data.template,
       }),
@@ -55,10 +63,13 @@ export class WhatsappService {
           },
         },
       }),
+      ...(data?.interactive && !data?.flowId && {
+        interactive: data.interactive,
+      }),
     };
 
     try {
-      this.logger.log('Enviando mensaje de WhatsApp:', JSON.stringify({ to: data.to, type: data?.flowId ? 'interactive' : 'template' }, null, 2));
+      this.logger.log('Enviando mensaje de WhatsApp:', JSON.stringify({ to: data.to, type: messageType }, null, 2));
       this.logger.log('Body completo:', JSON.stringify(body, null, 2));
       
       const response = await fetch(url, {

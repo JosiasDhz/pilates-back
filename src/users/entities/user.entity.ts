@@ -62,14 +62,20 @@ export class User {
   @BeforeInsert()
   @BeforeUpdate()
   updateData() {
-    this.email = this.email.toLowerCase().trim();
+    if (this.email) {
+      this.email = this.email.toLowerCase().trim();
+    }
 
     this.name = this.normalizeName(this.name);
     this.lastName = this.normalizeName(this.lastName);
     this.secondLastName = this.normalizeName(this.secondLastName);
   }
 
-  normalizeName(name: string): string {
+  normalizeName(name: string | null | undefined): string | null {
+    if (!name || typeof name !== 'string') {
+      return null;
+    }
+    
     return name
       .trim()
       .replace(/\s+/g, ' ') // Reemplaza múltiples espacios por uno solo

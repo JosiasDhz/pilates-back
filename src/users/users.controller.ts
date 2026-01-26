@@ -43,6 +43,16 @@ export class UsersController {
     return this.usersService.getStats();
   }
 
+  @Get('check-email/:email')
+  async checkEmail(@Param('email') email: string) {
+    return this.usersService.checkEmailExists(email);
+  }
+
+  @Get('check-phone/:phone')
+  async checkPhone(@Param('phone') phone: string) {
+    return this.usersService.checkPhoneExists(phone);
+  }
+
   @Get(':id')
   @Auth(ValidRoles.admin)
   findOne(@Param('id') id: string, @GetUser() user: User) {

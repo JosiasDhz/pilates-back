@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -11,6 +12,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PaginatePaymentDto } from './dto/paginate-payment.dto';
 
 @Controller('payments')
@@ -30,6 +32,27 @@ export class PaymentsController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.paymentsService.findOne(id);
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Body() updatePaymentDto: UpdatePaymentDto,
+  ) {
+    return this.paymentsService.update(id, updatePaymentDto);
+  }
+
+  @Get('aspirant/:aspirantId/latest')
+  getLatestPaymentByAspirant(@Param('aspirantId') aspirantId: string) {
+    return this.paymentsService.getLatestPaymentByAspirantId(aspirantId);
+  }
+
+  @Patch('aspirant/:aspirantId/status')
+  updateAspirantPaymentStatus(
+    @Param('aspirantId') aspirantId: string,
+    @Body() updatePaymentDto: UpdatePaymentDto,
+  ) {
+    return this.paymentsService.updateAspirantPaymentStatus(aspirantId, updatePaymentDto);
   }
 
   @Post(':id/evidence')

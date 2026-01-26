@@ -70,15 +70,19 @@ export class FilesService {
     return { id: uuid, ...url };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, inline: boolean = false) {
     const file = await this.fileRepository.findOneBy({ id });
     if (!file)
       throw new NotFoundException({ message: 'Archivo no encontrado' });
 
+    const contentDisposition = inline
+      ? `inline; filename="${file.name}.${file.extension}"`
+      : `attachment; filename="${file.name}.${file.extension}"`;
+
     const command = new GetObjectCommand({
       Bucket: this.bucketName,
       Key: file.id,
-      ResponseContentDisposition: `attachment; filename="${file.name}.${file.extension}"`,
+      ResponseContentDisposition: contentDisposition,
     });
 
     const signedUrl = await getSignedUrl(this.client, command, {
