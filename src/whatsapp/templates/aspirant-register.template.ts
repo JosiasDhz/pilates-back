@@ -4,36 +4,29 @@
  * IMPORTANTE: Esta plantilla debe estar creada y aprobada en WhatsApp Business Manager
  * 
  * Estructura esperada de la plantilla:
- * Nombre: registro_valoracion
+ * Nombre: appointment_confirme
  * Idioma: es (Español)
  * 
  * Cuerpo del mensaje:
- * "¡Hola {{1}}! 👋
+ * "Hola {{1}},
  * 
- * ✅ Tu registro de valoración ha sido confirmado:
+ * Su cita está programada para el {{2}}.
+ * Hora: {{3}}
+ * Estudio: {{4}}
  * 
- * 📅 Fecha: {{2}}
- * 🕐 Hora: {{3}}
- * 📍 Estudio: {{4}}
- * {{5}}
- * 
- * Te esperamos en tu clase de valoración. Si tienes alguna pregunta, no dudes en contactarnos.
- * 
- * ¡Nos vemos pronto! 🧘‍♀️"
+ * Esperamos su visita."
  * 
  * Parámetros:
  * 1. Nombre del aspirante
  * 2. Fecha formateada
  * 3. Hora
  * 4. Nombre del estudio
- * 5. Link de evidencia (opcional, solo si requiere evidencia)
  */
 export const aspirantRegisterTemplate = (
   firstName: string,
   fecha: string,
   hora: string,
   estudio: string,
-  evidenceLink?: string,
 ) => {
   const bodyParams = [
     {
@@ -54,17 +47,9 @@ export const aspirantRegisterTemplate = (
     },
   ];
 
-  // Si hay link de evidencia, agregarlo como parámetro adicional
-  if (evidenceLink) {
-    bodyParams.push({
-      type: 'text',
-      text: `\n\n📎 Para subir tu comprobante de pago, usa este enlace:\n${evidenceLink}`,
-    });
-  }
-
   return {
     template: {
-      name: 'registro_valoracion',
+      name: 'appointment_confirme',
       language: {
         code: 'es',
       },

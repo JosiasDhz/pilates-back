@@ -15,6 +15,7 @@ import { AspirantAssessmentPhoto } from 'src/aspirant-assessment-photo/entities/
 import { Student } from 'src/students/entities/student.entity';
 import { StudentStatusHistory } from 'src/students/entities/student-status-history.entity';
 import { PaymentMethod } from 'src/payment-methods/entities/payment-method.entity';
+import { WhatsappModule } from 'src/whatsapp/whatsapp.module';
 
 @Module({
   controllers: [UsersController],
@@ -33,6 +34,7 @@ import { PaymentMethod } from 'src/payment-methods/entities/payment-method.entit
     ]),
     RolsModule,
     FilesModule,
+    forwardRef(() => WhatsappModule),
     forwardRef(() => AuthModule),
   ],
   exports: [TypeOrmModule],

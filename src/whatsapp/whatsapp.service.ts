@@ -86,10 +86,46 @@ export class WhatsappService {
           statusText: response.statusText,
           error: responseData,
         });
+        
+        // Detectar errores específicos de templates no aprobados
+        const errorCode = responseData.error?.code;
+        const errorMessage = responseData.error?.message || '';
+        
+        // Códigos de error de WhatsApp relacionados con templates
+        const templateErrorCodes = [
+          132001, // Template not found
+          132005, // Template not approved
+          132012, // Template rejected
+          131026, // Message failed to send (puede ser por template no aprobado)
+        ];
+        
+        if (templateErrorCodes.includes(errorCode) || 
+            errorMessage.toLowerCase().includes('template') && 
+            (errorMessage.toLowerCase().includes('not approved') || 
+             errorMessage.toLowerCase().includes('pending') ||
+             errorMessage.toLowerCase().includes('rejected') ||
+             errorMessage.toLowerCase().includes('revisión'))) {
+          const templateError = new Error(`Template no aprobado: ${errorMessage}`);
+          (templateError as any).isTemplateNotApproved = true;
+          (templateError as any).errorCode = errorCode;
+          throw templateError;
+        }
+        
         throw new Error(responseData.error?.message || `WhatsApp API error: ${response.status}`);
       }
       
-      this.logger.log('✅ Mensaje de WhatsApp enviado exitosamente:', responseData);
+      // Verificar si el mensaje fue aceptado pero puede tener problemas de entrega
+      // Si el mensaje tiene status "accepted" pero el template no está aprobado,
+      // WhatsApp puede aceptarlo pero no entregarlo a números nuevos
+      if (responseData.messages && responseData.messages[0]) {
+        const messageStatus = responseData.messages[0].message_status;
+        if (messageStatus === 'accepted') {
+          this.logger.log('✅ Mensaje de WhatsApp aceptado por la API:', responseData);
+        } else {
+          this.logger.warn('⚠️ Mensaje de WhatsApp con estado inesperado:', messageStatus);
+        }
+      }
+      
       return responseData;
     } catch (error) {
       this.logger.error('Error sending WhatsApp message:', error);

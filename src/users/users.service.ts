@@ -26,6 +26,7 @@ import { AspirantAssessmentPhoto } from 'src/aspirant-assessment-photo/entities/
 import { Student } from 'src/students/entities/student.entity';
 import { StudentStatusHistory, StudentStatus } from 'src/students/entities/student-status-history.entity';
 import { PaymentMethod } from 'src/payment-methods/entities/payment-method.entity';
+import { WhatsappNotificationService } from 'src/whatsapp/services/whatsapp-notification.service';
 
 @Injectable()
 export class UsersService {
@@ -65,6 +66,7 @@ export class UsersService {
 
     private readonly fileService: FilesService,
     private readonly dataSource: DataSource,
+    private readonly whatsappNotificationService: WhatsappNotificationService,
   ) {}
 
   async create(createUserDto: CreateUserDto) {
@@ -87,6 +89,8 @@ export class UsersService {
 
     // Creación normal de usuario (sin estudiante)
     if (!data.password) data.password = uuid();
+    // Guardar la contraseña en texto plano temporalmente para enviarla por WhatsApp
+    const plainPassword = data.password;
 
     const userEmail = await this.findOneByEmail(data.email);
 
@@ -111,6 +115,21 @@ export class UsersService {
     await this.userRepository.save(user);
 
     delete user.password;
+
+    // Enviar credenciales por WhatsApp si hay teléfono
+    if (data.phone) {
+      const fullName = `${data.name} ${data.lastName}${data.secondLastName ? ' ' + data.secondLastName : ''}`.trim();
+      this.whatsappNotificationService.sendSystemCredentials(
+        fullName,
+        data.email,
+        plainPassword,
+        data.phone,
+        'usuario',
+      ).catch((error) => {
+        // Loggear el error pero no fallar la creación del usuario
+        console.error('Error al enviar credenciales por WhatsApp:', error);
+      });
+    }
 
     return user;
   }
@@ -282,6 +301,8 @@ export class UsersService {
       // 4. Crear User
       const userPassword = password || uuid();
       const hashedPassword = bcrypt.hashSync(userPassword, 10);
+      // Guardar la contraseña en texto plano temporalmente para enviarla por WhatsApp
+      const plainPassword = userPassword;
 
       const newUser = queryRunner.manager.create(User, {
         name,
@@ -320,6 +341,21 @@ export class UsersService {
 
       // Limpiar password antes de retornar
       delete (savedUser as any).password;
+
+      // Enviar credenciales por WhatsApp si hay teléfono
+      if (phone) {
+        const fullName = `${name} ${lastName}${secondLastName ? ' ' + secondLastName : ''}`.trim();
+        this.whatsappNotificationService.sendSystemCredentials(
+          fullName,
+          email,
+          plainPassword,
+          phone,
+          'estudiante',
+        ).catch((error) => {
+          // Loggear el error pero no fallar la creación del estudiante
+          console.error('Error al enviar credenciales por WhatsApp:', error);
+        });
+      }
 
       return {
         user: savedUser,
@@ -496,8 +532,10 @@ export class UsersService {
 
     userFound.name = this.normalizeName(userFound.name);
     userFound.lastName = this.normalizeName(userFound.lastName);
-    userFound.secondLastName = this.normalizeName(userFound.secondLastName);
-    userFound.email = userFound.email.toLowerCase().trim();
+    userFound.secondLastName = userFound.secondLastName ? this.normalizeName(userFound.secondLastName) : null;
+    if (userFound.email) {
+      userFound.email = userFound.email.toLowerCase().trim();
+    }
 
     const { affected } = await this.userRepository.update({ id }, userFound);
 
@@ -518,7 +556,8 @@ export class UsersService {
     return user;
   }
 
-  private normalizeName(name: string): string {
+  private normalizeName(name: string | null | undefined): string {
+    if (!name) return '';
     return name
       .trim()
       .replace(/\s+/g, ' ') // Reemplaza múltiples espacios por uno solo
@@ -601,5 +640,49 @@ export class UsersService {
     return {
       exists: !!aspirant,
     };
+  }
+
+  /**
+   * Regenera y envía credenciales de acceso para un usuario existente
+   * @param userId ID del usuario
+   * @returns Usuario actualizado (sin password)
+   */
+  async regenerateAndSendCredentials(userId: string): Promise<User> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: { rol: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Usuario con id ${userId} no encontrado`);
+    }
+
+    if (!user.phone) {
+      throw new BadRequestException('El usuario no tiene un número de teléfono registrado');
+    }
+
+    // Generar nueva contraseña
+    const newPassword = uuid();
+    const hashedPassword = bcrypt.hashSync(newPassword, 10);
+
+    // Actualizar contraseña en la base de datos
+    user.password = hashedPassword;
+    await this.userRepository.save(user);
+
+    // Enviar credenciales por WhatsApp
+    const fullName = `${user.name} ${user.lastName}${user.secondLastName ? ' ' + user.secondLastName : ''}`.trim();
+    const userType = user.rol?.name?.toLowerCase().includes('estudiante') ? 'estudiante' : 'usuario';
+    
+    await this.whatsappNotificationService.sendSystemCredentials(
+      fullName,
+      user.email,
+      newPassword,
+      user.phone,
+      userType as 'estudiante' | 'usuario',
+    );
+
+    // Eliminar password del objeto antes de retornar
+    delete (user as any).password;
+    return user;
   }
 }

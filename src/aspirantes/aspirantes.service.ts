@@ -201,11 +201,18 @@ export class AspirantesService {
             const uploadedEvidence = await this.paymentsService.uploadEvidence(payment.id, evidence);
             console.log('✅ Evidencia subida exitosamente:', uploadedEvidence.id);
             evidenceUploaded = true;
-          } catch (error) {
+          } catch (error: any) {
             console.error('❌ Error al subir evidencia:', error);
-
-
-            console.error('Error completo:', JSON.stringify(error, null, 2));
+            // Si el error es sobre paymentId null pero la evidencia se guardó, considerar como subida
+            // El método uploadEvidence ahora maneja este caso y siempre retorna la evidencia si se guardó
+            const errorMessage = error?.message || String(error);
+            if (errorMessage.includes('paymentId') && errorMessage.includes('null')) {
+              console.log('⚠️ Error de sincronización después de guardar evidencia, pero evidencia ya está guardada');
+              evidenceUploaded = true; // La evidencia se guardó correctamente antes del error
+            } else {
+              console.error('Error completo:', JSON.stringify(error, null, 2));
+              evidenceUploaded = false;
+            }
           }
         } else {
           console.log('⚠️ NO SE PROPORCIONÓ EVIDENCIA VÁLIDA');
@@ -223,22 +230,25 @@ export class AspirantesService {
         console.log('AmountCents es 0, no se crea Payment');
       }
 
+      // Solo generar token de acceso si NO se subió evidencia
+      // Si se subió evidencia, no necesita el link para subirla después
+      if (!evidenceUploaded) {
+        try {
+          const accessToken = await this.aspirantAccessTokenService.generateToken({
+            aspirantId: savedAspirant.id,
+            expiresInDays: 30,
+          });
+          console.log('✅ Token de acceso generado:', accessToken.token);
 
-
-      try {
-        const accessToken = await this.aspirantAccessTokenService.generateToken({
-          aspirantId: savedAspirant.id,
-          expiresInDays: 30,
-        });
-        console.log('✅ Token de acceso generado:', accessToken.token);
-
-        (savedAspirant as any).accessToken = accessToken.token;
-        accessTokenLink = `${process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3000'}/aspirantes/subir-evidencia/${accessToken.token}`;
-        (savedAspirant as any).accessTokenLink = accessTokenLink;
-        console.log('✅ Link de acceso generado:', accessTokenLink);
-      } catch (error) {
-        console.error('❌ Error al generar token de acceso:', error);
-
+          (savedAspirant as any).accessToken = accessToken.token;
+          accessTokenLink = `${process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3000'}/aspirantes/subir-evidencia/${accessToken.token}`;
+          (savedAspirant as any).accessTokenLink = accessTokenLink;
+          console.log('✅ Link de acceso generado:', accessTokenLink);
+        } catch (error) {
+          console.error('❌ Error al generar token de acceso:', error);
+        }
+      } else {
+        console.log('✅ Evidencia ya subida, no se genera token de acceso');
       }
     }
 
@@ -481,9 +491,36 @@ export class AspirantesService {
 
   async checkPhoneExists(phone: string): Promise<{ exists: boolean }> {
     const normalizedPhone = phone.trim();
-    const aspirant = await this.aspiranteRepository.findOne({
+    
+    // Buscar primero con el número tal como viene
+    let aspirant = await this.aspiranteRepository.findOne({
       where: { phone: normalizedPhone },
     });
+    
+    // Si no se encuentra y el número tiene 10 dígitos, buscar también con prefijo 521
+    if (!aspirant && normalizedPhone.length === 10 && /^\d+$/.test(normalizedPhone)) {
+      const phoneWithPrefix = `521${normalizedPhone}`;
+      aspirant = await this.aspiranteRepository.findOne({
+        where: { phone: phoneWithPrefix },
+      });
+    }
+    
+    // Si no se encuentra y el número tiene 12 dígitos y empieza con 52, buscar también sin el prefijo
+    if (!aspirant && normalizedPhone.length === 12 && normalizedPhone.startsWith('52')) {
+      const phoneWithoutPrefix = normalizedPhone.substring(2);
+      aspirant = await this.aspiranteRepository.findOne({
+        where: { phone: phoneWithoutPrefix },
+      });
+    }
+    
+    // Si no se encuentra y el número tiene 13 dígitos y empieza con 521, buscar también sin el prefijo
+    if (!aspirant && normalizedPhone.length === 13 && normalizedPhone.startsWith('521')) {
+      const phoneWithoutPrefix = normalizedPhone.substring(3);
+      aspirant = await this.aspiranteRepository.findOne({
+        where: { phone: phoneWithoutPrefix },
+      });
+    }
+    
     return {
       exists: !!aspirant,
     };
@@ -504,12 +541,6 @@ export class AspirantesService {
       if (!aspirant) {
         throw new NotFoundException(`Aspirante con id ${aspirantId} no encontrado`);
       }
-
-
-      if (aspirant.status.code === 'CONVERTED') {
-        throw new BadRequestException('El aspirante ya ha sido convertido a usuario');
-      }
-
 
       let avatarFile: File | null = null;
       if (saveAssessmentDto.avatarFileId) {

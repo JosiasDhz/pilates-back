@@ -37,4 +37,9 @@ export class InstructorsController {
   remove(@Param('id') id: string) {
     return this.instructorsService.remove(id);
   }
+
+  @Post(':id/regenerate-credentials')
+  async regenerateCredentials(@Param('id') id: string) {
+    return this.instructorsService.regenerateAndSendCredentials(id);
+  }
 }

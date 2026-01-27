@@ -130,10 +130,9 @@ export class PaymentsService {
       bufferLength: file.buffer?.length,
     } : 'NO HAY ARCHIVO');
 
-    // Verificar que el pago existe
+    // Verificar que el pago existe (SIN cargar relaciones para evitar problemas de sincronización)
     const payment = await this.paymentRepository.findOne({
       where: { id: paymentId },
-      relations: ['evidences'],
     });
 
     if (!payment) {
@@ -166,22 +165,40 @@ export class PaymentsService {
     const uploadedFile = await this.filesService.uploadFile(file);
     console.log('✅ Archivo subido a S3:', uploadedFile.id);
 
-    // Crear el registro de evidencia
-    const evidence = this.paymentEvidenceRepository.create({
+    // Crear el registro de evidencia usando insert directo para evitar problemas de sincronización
+    console.log('Guardando evidencia en BD...');
+    const insertResult = await this.paymentEvidenceRepository.insert({
       paymentId: payment.id,
       fileId: uploadedFile.id,
       uploadedAt: new Date(),
     });
+    
+    const savedEvidenceId = insertResult.identifiers[0].id;
+    console.log('✅ Evidencia guardada:', savedEvidenceId);
 
-    console.log('Guardando evidencia en BD...');
-    const savedEvidence = await this.paymentEvidenceRepository.save(evidence);
-    console.log('✅ Evidencia guardada:', savedEvidence.id);
-
-    // Cambiar el estado del pago a UNDER_REVIEW
-    payment.status = PaymentStatus.UNDER_REVIEW;
-    await this.paymentRepository.save(payment);
-    console.log('✅ Estado del pago actualizado a UNDER_REVIEW');
+    // Cambiar el estado del pago a UNDER_REVIEW usando update directo para evitar sincronización
+    // Usar try-catch para que si hay error aquí, aún retornemos la evidencia guardada
+    try {
+      await this.paymentRepository.update(
+        { id: payment.id },
+        { status: PaymentStatus.UNDER_REVIEW }
+      );
+      console.log('✅ Estado del pago actualizado a UNDER_REVIEW');
+    } catch (updateError) {
+      console.error('⚠️ Error al actualizar estado del pago (pero evidencia ya guardada):', updateError);
+      // Continuar aunque haya error, la evidencia ya está guardada
+    }
+    
     console.log('======================');
+
+    // Retornar la evidencia buscándola sin relaciones para evitar problemas
+    const savedEvidence = await this.paymentEvidenceRepository.findOne({
+      where: { id: savedEvidenceId },
+    });
+
+    if (!savedEvidence) {
+      throw new Error('Evidencia guardada pero no se pudo recuperar');
+    }
 
     return savedEvidence;
   }

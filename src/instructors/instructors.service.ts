@@ -19,12 +19,14 @@ import { CreateInstructorDto } from './dto/create-instructor.dto';
 import { UpdateInstructorDto } from './dto/update-instructor.dto';
 import { PaginateInstructorDto } from './dto/paginate-instructor.dto';
 import { FilesService } from 'src/files/files.service';
+import { WhatsappNotificationService } from 'src/whatsapp/services/whatsapp-notification.service';
 
 @Injectable()
 export class InstructorsService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly filesService: FilesService,
+    private readonly whatsappNotificationService: WhatsappNotificationService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @InjectRepository(Rol)
@@ -104,6 +106,8 @@ export class InstructorsService {
 
       const password = dto.password || uuid();
       const hashed = bcrypt.hashSync(password, 10);
+      // Guardar la contraseña en texto plano temporalmente para enviarla por WhatsApp
+      const plainPassword = password;
 
       const user = queryRunner.manager.create(User, {
         name: dto.name,
@@ -176,6 +180,22 @@ export class InstructorsService {
         delete (result.employee.user as any).password;
       }
       await this.hydrateAvatarUrl(result);
+
+      // Enviar credenciales por WhatsApp si hay teléfono
+      if (dto.phone) {
+        const fullName = `${dto.name} ${dto.lastName}${dto.secondLastName ? ' ' + dto.secondLastName : ''}`.trim();
+        this.whatsappNotificationService.sendSystemCredentials(
+          fullName,
+          email,
+          plainPassword,
+          dto.phone,
+          'instructor',
+        ).catch((error) => {
+          // Loggear el error pero no fallar la creación del instructor
+          console.error('Error al enviar credenciales por WhatsApp:', error);
+        });
+      }
+
       return result;
     } catch (e) {
       await queryRunner.rollbackTransaction();
@@ -291,5 +311,53 @@ export class InstructorsService {
       activos: parseInt(raw?.activos ?? '0', 10) || 0,
       inactivos: parseInt(raw?.inactivos ?? '0', 10) || 0,
     };
+  }
+
+  /**
+   * Regenera y envía credenciales de acceso para un instructor existente
+   * @param instructorId ID del instructor
+   * @returns Instructor actualizado (sin password en user)
+   */
+  async regenerateAndSendCredentials(instructorId: string) {
+    const instructor = await this.instructorRepository.findOne({
+      where: { id: instructorId },
+      relations: { employee: { user: { rol: true } } },
+    });
+
+    if (!instructor) {
+      throw new NotFoundException(`Instructor con id ${instructorId} no encontrado`);
+    }
+
+    const user = instructor.employee?.user;
+    if (!user) {
+      throw new NotFoundException('No se encontró el usuario asociado al instructor');
+    }
+
+    if (!user.phone) {
+      throw new BadRequestException('El instructor no tiene un número de teléfono registrado');
+    }
+
+    // Generar nueva contraseña
+    const newPassword = uuid();
+    const hashedPassword = bcrypt.hashSync(newPassword, 10);
+
+    // Actualizar contraseña en la base de datos
+    user.password = hashedPassword;
+    await this.userRepository.save(user);
+
+    // Enviar credenciales por WhatsApp
+    const fullName = `${user.name} ${user.lastName}${user.secondLastName ? ' ' + user.secondLastName : ''}`.trim();
+    
+    await this.whatsappNotificationService.sendSystemCredentials(
+      fullName,
+      user.email,
+      newPassword,
+      user.phone,
+      'instructor',
+    );
+
+    // Retornar instructor actualizado sin password
+    const updatedInstructor = await this.findOne(instructorId);
+    return updatedInstructor;
   }
 }

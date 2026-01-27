@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
 import { WhatsappController } from './whatsapp.controller';
 import { UsersModule } from 'src/users/users.module';
@@ -8,7 +8,7 @@ import { WhatsappNotificationService } from './services/whatsapp-notification.se
   controllers: [WhatsappController],
   providers: [WhatsappService, WhatsappNotificationService],
   imports: [
-    UsersModule
+    forwardRef(() => UsersModule)
   ],
   exports: [WhatsappService, WhatsappNotificationService],
 })

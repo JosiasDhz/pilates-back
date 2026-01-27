@@ -74,4 +74,10 @@ export class UsersController {
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);
   }
+
+  @Post(':id/regenerate-credentials')
+  @Auth(ValidRoles.admin)
+  async regenerateCredentials(@Param('id') id: string) {
+    return this.usersService.regenerateAndSendCredentials(id);
+  }
 }
