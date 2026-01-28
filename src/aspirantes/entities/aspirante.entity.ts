@@ -38,17 +38,17 @@ export class Aspirante {
   @Column({ type: 'varchar', length: 255, unique: true })
   email: string;
 
-  @Column({ type: 'integer' })
-  age: number;
+  @Column({ type: 'integer', nullable: true })
+  age: number | null;
 
-  @Column({ type: 'varchar', length: 50 })
-  language: string;
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  language: string | null;
 
-  @Column({ type: 'varchar', length: 120 })
-  occupation: string;
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  occupation: string | null;
 
-  @Column({ type: 'varchar', length: 20 })
-  gender: string;
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  gender: string | null;
 
   @ManyToOne(() => PaymentMethod, { nullable: false, eager: true })
   @JoinColumn({ name: 'paymentMethodId' })

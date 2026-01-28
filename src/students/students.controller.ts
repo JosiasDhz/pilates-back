@@ -4,6 +4,9 @@ import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { ChangeStatusDto } from './dto/change-status.dto';
 import { PaginateStudentDto } from './dto/paginate-student.dto';
+import { Auth } from 'src/auth/decorators/auth.decorator';
+import { GetUser } from 'src/auth/decorators/get-user.decorator';
+import { User } from 'src/users/entities/user.entity';
 
 @Controller('students')
 export class StudentsController {
@@ -27,6 +30,12 @@ export class StudentsController {
     }
     // Si no hay parámetros, retornar todos (compatibilidad hacia atrás)
     return this.studentsService.findAll();
+  }
+
+  @Get('my-profile')
+  @Auth()
+  getMyProfile(@GetUser() user: User) {
+    return this.studentsService.findByUserId(user.id);
   }
 
   @Get(':id')

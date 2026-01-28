@@ -33,6 +33,7 @@ export class AppService implements OnApplicationBootstrap {
   async onApplicationBootstrap() {
     await this.createDefaultData();
     await this.createInstructorRole();
+    await this.createStudentRole();
     await this.createDefaultAspirantStatuses();
     await this.createDefaultPaymentMethods();
     await this.createDefaultStudios();
@@ -69,7 +70,25 @@ export class AppService implements OnApplicationBootstrap {
     });
   
     if (instructorRolFound) {
-      this.logger.log('Instructor role already exists');
+      // Actualizar permisos si ya existe pero no tiene los correctos
+      const requiredPermissions = [
+        '/instructor/perfil',
+        '/instructor/calendario',
+        '/instructor/calendario/*',
+        '/instructor/aspirantes',
+        '/instructor/aspirantes/*',
+      ];
+      const hasAllPermissions = requiredPermissions.every(perm => 
+        instructorRolFound.permissions.includes(perm)
+      );
+      
+      if (!hasAllPermissions) {
+        instructorRolFound.permissions = requiredPermissions;
+        await this.rolRepository.save(instructorRolFound);
+        this.logger.log('Instructor role permissions updated');
+      } else {
+        this.logger.log('Instructor role already exists');
+      }
       return instructorRolFound;
     }
   
@@ -77,14 +96,62 @@ export class AppService implements OnApplicationBootstrap {
       name: 'Instructor',
       description: 'Personal docente con acceso a gestión de cursos y alumnos',
       permissions: [
-        '/dashboard/instructor/courses',
-        '/dashboard/instructor/students',
-        '/dashboard/instructor/reports',
+        '/instructor/perfil',
+        '/instructor/calendario',
+        '/instructor/calendario/*',
+        '/instructor/aspirantes',
+        '/instructor/aspirantes/*',
       ],
     });
   
     this.logger.log('Instructor role created successfully');
     return instructorRol;
+  }
+
+  private async createStudentRole() {
+    const studentRolFound = await this.rolRepository.findOne({
+      where: { name: 'Estudiante' },
+    });
+  
+    if (studentRolFound) {
+      // Actualizar permisos si ya existe pero no tiene los correctos
+      const requiredPermissions = [
+        '/student/perfil',
+        '/student/pagos',
+        '/student/pagos/*',
+        '/student/calendario',
+        '/student/calendario/*',
+        '/student/cambiar-horario',
+      ];
+      const hasAllPermissions = requiredPermissions.every(perm => 
+        studentRolFound.permissions.includes(perm)
+      );
+      
+      if (!hasAllPermissions) {
+        studentRolFound.permissions = requiredPermissions;
+        await this.rolRepository.save(studentRolFound);
+        this.logger.log('Student role permissions updated');
+      } else {
+        this.logger.log('Student role already exists');
+      }
+      return studentRolFound;
+    }
+  
+    const studentRol = await this.rolRepository.save({
+      name: 'Estudiante',
+      description: 'Estudiante con acceso a su perfil y pagos',
+      permissions: [
+        '/student/perfil',
+        '/student/pagos',
+        '/student/pagos/*',
+        '/student/calendario',
+        '/student/calendario/*',
+        '/student/cambiar-horario',
+      ],
+    });
+  
+    this.logger.log('Student role created successfully');
+    return studentRol;
   }
 
   private async createDefaultAspirantStatuses() {

@@ -3,6 +3,9 @@ import { InstructorsService } from './instructors.service';
 import { CreateInstructorDto } from './dto/create-instructor.dto';
 import { UpdateInstructorDto } from './dto/update-instructor.dto';
 import { PaginateInstructorDto } from './dto/paginate-instructor.dto';
+import { Auth } from 'src/auth/decorators/auth.decorator';
+import { GetUser } from 'src/auth/decorators/get-user.decorator';
+import { User } from 'src/users/entities/user.entity';
 
 @Controller('instructors')
 export class InstructorsController {
@@ -21,6 +24,12 @@ export class InstructorsController {
   @Get('stats')
   getStats() {
     return this.instructorsService.getStats();
+  }
+
+  @Get('my-profile')
+  @Auth()
+  getMyProfile(@GetUser() user: User) {
+    return this.instructorsService.findByUserId(user.id);
   }
 
   @Get(':id')

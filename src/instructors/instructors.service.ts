@@ -261,6 +261,29 @@ export class InstructorsService {
     return { records, total };
   }
 
+  async findByUserId(userId: string) {
+    const instructor = await this.instructorRepository
+      .createQueryBuilder('instructor')
+      .leftJoinAndSelect('instructor.employee', 'employee')
+      .leftJoinAndSelect('employee.user', 'user')
+      .leftJoinAndSelect('user.rol', 'rol')
+      .leftJoinAndSelect('user.avatar', 'avatar')
+      .leftJoinAndSelect('instructor.studio', 'studio')
+      .where('employee.userId = :userId', { userId })
+      .getOne();
+
+    if (!instructor) {
+      throw new NotFoundException(`Instructor con userId ${userId} no encontrado`);
+    }
+
+    if (instructor.employee?.user && 'password' in instructor.employee.user) {
+      delete (instructor.employee.user as any).password;
+    }
+
+    await this.hydrateAvatarUrl(instructor);
+    return instructor;
+  }
+
   async findOne(id: string) {
     if (!isUUID(id)) throw new NotFoundException('Proporciona un UUID válido de instructor');
     const instructor = await this.instructorRepository.findOne({

@@ -11,6 +11,7 @@ import {
 import { Studio } from 'src/studios/entities/studio.entity';
 import { Instructor } from 'src/instructors/entities/instructor.entity';
 import { Aspirante } from 'src/aspirantes/entities/aspirante.entity';
+import { StudentClassRegistration } from 'src/student-class-registrations/entities/student-class-registration.entity';
 
 export type EventType =
   | 'valoracion'
@@ -63,6 +64,13 @@ export class Event {
 
   @OneToMany(() => Aspirante, (aspirant) => aspirant.valoracionEvent)
   aspirants: Aspirante[];
+
+  @OneToMany(
+    () => StudentClassRegistration,
+    (registration) => registration.event,
+    { cascade: false, eager: false },
+  )
+  studentRegistrations: StudentClassRegistration[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

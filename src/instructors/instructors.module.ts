@@ -10,12 +10,14 @@ import { InstructorsService } from './instructors.service';
 import { InstructorsController } from './instructors.controller';
 import { FilesModule } from 'src/files/files.module';
 import { WhatsappModule } from 'src/whatsapp/whatsapp.module';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, Rol, File, Employee, Studio, Instructor]),
     FilesModule,
     forwardRef(() => WhatsappModule),
+    AuthModule,
   ],
   controllers: [InstructorsController],
   providers: [InstructorsService],

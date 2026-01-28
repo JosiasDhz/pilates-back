@@ -14,6 +14,9 @@ import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PaginatePaymentDto } from './dto/paginate-payment.dto';
+import { Auth } from 'src/auth/decorators/auth.decorator';
+import { GetUser } from 'src/auth/decorators/get-user.decorator';
+import { User } from 'src/users/entities/user.entity';
 
 @Controller('payments')
 export class PaymentsController {
@@ -27,6 +30,12 @@ export class PaymentsController {
   @Get()
   findAll(@Query() paginationDto: PaginatePaymentDto) {
     return this.paymentsService.findAll(paginationDto);
+  }
+
+  @Get('my-payments')
+  @Auth()
+  getMyPayments(@GetUser() user: User) {
+    return this.paymentsService.findByUserId(user.id);
   }
 
   @Get(':id')

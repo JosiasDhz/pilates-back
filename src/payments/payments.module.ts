@@ -7,6 +7,7 @@ import { PaymentEvidence } from './entities/payment-evidence.entity';
 import { FilesModule } from 'src/files/files.module';
 import { UsersModule } from 'src/users/users.module';
 import { PaymentMethodsModule } from 'src/payment-methods/payment-methods.module';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
   controllers: [PaymentsController],
@@ -16,6 +17,7 @@ import { PaymentMethodsModule } from 'src/payment-methods/payment-methods.module
     FilesModule,
     UsersModule,
     PaymentMethodsModule,
+    AuthModule,
   ],
   exports: [TypeOrmModule, PaymentsService],
 })

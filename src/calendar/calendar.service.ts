@@ -105,7 +105,7 @@ export class CalendarService {
   }
 
   async findAll(query: QueryEventsDto) {
-    const { month, year, studioId, type } = query;
+    const { month, year, studioId, instructorId, type } = query;
     const qb = this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.studio', 'studio')
@@ -130,6 +130,7 @@ export class CalendarService {
     }
 
     if (studioId) qb.andWhere('event.studioId = :studioId', { studioId });
+    if (instructorId) qb.andWhere('event.instructorId = :instructorId', { instructorId });
     if (type) qb.andWhere('event.type = :type', { type });
 
     const list = await qb.getMany();

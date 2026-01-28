@@ -267,7 +267,7 @@ export class AspirantesService {
     return this.findOne(savedAspirant.id);
   }
 
-  async findAll(limit = 10, offset = 0, sort = 'createdAt', order: 'ASC' | 'DESC' = 'DESC', search = '', statusId?: string) {
+  async findAll(limit = 10, offset = 0, sort = 'createdAt', order: 'ASC' | 'DESC' = 'DESC', search = '', statusId?: string, instructorId?: string) {
     const query = this.aspiranteRepository
       .createQueryBuilder('aspirant')
       .leftJoinAndSelect('aspirant.medicalHistory', 'medicalHistory')
@@ -276,6 +276,11 @@ export class AspirantesService {
       .leftJoinAndSelect('aspirant.valoracionEvent', 'valoracionEvent')
       .take(limit)
       .skip(offset);
+
+    // Filtrar por instructor si se especifica
+    if (instructorId) {
+      query.andWhere('valoracionEvent.instructorId = :instructorId', { instructorId });
+    }
 
     // Si no se especifica un statusId, excluir los convertidos por defecto
     if (!statusId) {

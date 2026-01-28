@@ -16,41 +16,41 @@ import { Type } from 'class-transformer';
 export class CreateAspirantPhysicalRecordDto {
   @Type(() => Number)
   @IsNumber()
-  @ValidateIf((o) => o.isStudent === true)
+  @IsOptional()
   @Min(0)
   @Max(500)
-  weight?: number; // peso en kg
+  weight?: number;
 
   @Type(() => Number)
   @IsNumber()
-  @ValidateIf((o) => o.isStudent === true)
+  @IsOptional()
   @Min(0)
   @Max(300)
-  height?: number; // altura en cm
+  height?: number;
 
   @IsString()
   @IsOptional()
-  flexibility?: string; // flexibilidad
+  flexibility?: string;
 
   @IsString()
   @IsOptional()
-  strength?: string; // fuerza
+  strength?: string;
 
   @IsString()
   @IsOptional()
-  balance?: string; // equilibrio
+  balance?: string;
 
   @IsString()
   @IsOptional()
-  posture?: string; // postura
+  posture?: string;
 
   @IsString()
   @IsOptional()
-  rangeOfMotion?: string; // rango de movimiento
+  rangeOfMotion?: string;
 
   @IsString()
   @IsOptional()
-  observations?: string; // observaciones
+  observations?: string;
 }
 
 export class CreateAspirantMedicalHistoryDto {
@@ -91,6 +91,7 @@ export class CreateUserDto {
   lastName: string;
 
   @IsString()
+  @IsOptional()
   secondLastName: string;
 
   @IsEmail()
@@ -118,7 +119,7 @@ export class CreateUserDto {
   @IsOptional()
   position: string;
 
-  // Campos para estudiante
+
   @IsBoolean()
   @IsOptional()
   isStudent?: boolean;
@@ -150,12 +151,10 @@ export class CreateUserDto {
   assessmentNotes?: string;
 
   @IsString()
-  @ValidateIf((o) => o.isStudent === true)
   @IsOptional()
   language?: string;
 
   @IsString()
-  @ValidateIf((o) => o.isStudent === true)
   @IsOptional()
   occupation?: string;
 

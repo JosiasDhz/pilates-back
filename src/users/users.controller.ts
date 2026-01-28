@@ -11,6 +11,7 @@ import {
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { RegisterStudentDto } from './dto/register-student.dto';
 import { Auth } from 'src/auth/decorators/auth.decorator';
 import { PaginationDto } from 'src/common/dto/pagination.dto';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
@@ -26,6 +27,11 @@ export class UsersController {
   @Auth(ValidRoles.admin)
   create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.create(createUserDto);
+  }
+
+  @Post('/register-student')
+  async registerStudent(@Body() registerStudentDto: RegisterStudentDto) {
+    return this.usersService.registerPublicStudent(registerStudentDto);
   }
 
   @Get('/paginate')

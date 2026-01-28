@@ -28,6 +28,8 @@ import { getTypeOrmConfig } from './typeorm.config';
 import { AspirantPhysicalRecordModule } from './aspirant-physical-record/aspirant-physical-record.module';
 import { AspirantAssessmentPhotoModule } from './aspirant-assessment-photo/aspirant-assessment-photo.module';
 import { StudentsModule } from './students/students.module';
+import { StudentClassRegistrationsModule } from './student-class-registrations/student-class-registrations.module';
+import { ScheduleChangesModule } from './schedule-changes/schedule-changes.module';
 
 @Module({
   imports: [
@@ -55,6 +57,8 @@ import { StudentsModule } from './students/students.module';
     AspirantPhysicalRecordModule,
     AspirantAssessmentPhotoModule,
     StudentsModule,
+    StudentClassRegistrationsModule,
+    ScheduleChangesModule,
   ],
   controllers: [],
   providers: [AppService],

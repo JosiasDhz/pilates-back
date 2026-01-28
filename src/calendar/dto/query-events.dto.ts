@@ -21,6 +21,10 @@ export class QueryEventsDto {
   studioId?: string;
 
   @IsOptional()
+  @IsUUID()
+  instructorId?: string;
+
+  @IsOptional()
   @IsString()
   type?: string;
 }

@@ -99,6 +99,7 @@ export class AspirantesController {
     @Query('order') order?: 'ASC' | 'DESC',
     @Query('search') search?: string,
     @Query('statusId') statusId?: string,
+    @Query('instructorId') instructorId?: string,
   ) {
     return this.aspirantesService.findAll(
       limit ? parseInt(limit, 10) : 10,
@@ -107,6 +108,7 @@ export class AspirantesController {
       order || 'DESC',
       search || '',
       statusId,
+      instructorId,
     );
   }
 

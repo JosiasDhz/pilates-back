@@ -286,6 +286,23 @@ export class PaymentsService {
   }
 
   /**
+   * Encuentra todos los pagos del usuario autenticado (estudiante)
+   */
+  async findByUserId(userId: string): Promise<any[]> {
+    const payments = await this.paymentRepository.find({
+      where: { userId },
+      relations: ['paymentMethod', 'evidences', 'evidences.file'],
+      order: { createdAt: 'DESC' },
+    });
+
+    // Transformar bigint a string para serialización JSON
+    return payments.map((payment) => ({
+      ...payment,
+      amountCents: payment.amountCents.toString(),
+    }));
+  }
+
+  /**
    * Encuentra todos los pagos de un aspirante
    */
   async findByAspirantId(aspirantId: string): Promise<Payment[]> {

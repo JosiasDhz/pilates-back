@@ -28,10 +28,14 @@ export class StudentsService {
   }
 
   async findAll() {
-    return await this.studentRepository.find({
-      relations: ['user', 'aspirant'],
-      order: { createdAt: 'DESC' },
-    });
+    return await this.studentRepository
+      .createQueryBuilder('student')
+      .leftJoinAndSelect('student.user', 'user')
+      .leftJoinAndSelect('user.rol', 'rol')
+      .leftJoinAndSelect('student.aspirant', 'aspirant')
+      .where('rol.name = :rolName', { rolName: 'Estudiante' })
+      .orderBy('student.createdAt', 'DESC')
+      .getMany();
   }
 
   async findAllPaginated(paginationDto: PaginateStudentDto) {
@@ -47,7 +51,9 @@ export class StudentsService {
       .createQueryBuilder('student')
       .leftJoinAndSelect('student.user', 'user')
       .leftJoinAndSelect('user.avatar', 'avatar')
+      .leftJoinAndSelect('user.rol', 'rol')
       .leftJoinAndSelect('student.aspirant', 'aspirant')
+      .where('rol.name = :rolName', { rolName: 'Estudiante' })
       .take(limit)
       .skip(offset);
 
@@ -112,6 +118,34 @@ export class StudentsService {
     return student;
   }
 
+  async findByUserId(userId: string) {
+    const student = await this.studentRepository
+      .createQueryBuilder('student')
+      .leftJoinAndSelect('student.user', 'user')
+      .leftJoinAndSelect('user.avatar', 'avatar')
+      .leftJoinAndSelect('student.aspirant', 'aspirant')
+      .leftJoinAndSelect('aspirant.physicalRecord', 'physicalRecord')
+      .leftJoinAndSelect('aspirant.medicalHistory', 'medicalHistory')
+      .leftJoinAndSelect('aspirant.assessmentPhotos', 'assessmentPhotos')
+      .leftJoinAndSelect('assessmentPhotos.file', 'file')
+      .leftJoinAndSelect('student.statusHistory', 'statusHistory')
+      .where('student.userId = :userId', { userId })
+      .getOne();
+
+    if (!student) {
+      throw new NotFoundException(`Estudiante con userId ${userId} no encontrado`);
+    }
+
+    // Ordenar el historial por fecha de inicio descendente
+    if (student.statusHistory) {
+      student.statusHistory.sort((a, b) => {
+        return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
+      });
+    }
+
+    return student;
+  }
+
   async update(id: string, updateStudentDto: UpdateStudentDto) {
     const student = await this.findOne(id);
     Object.assign(student, updateStudentDto);
@@ -125,15 +159,29 @@ export class StudentsService {
   }
 
   async getStats() {
-    const total = await this.studentRepository.count();
+    // Contar solo estudiantes con rol "Estudiante"
+    const total = await this.studentRepository
+      .createQueryBuilder('student')
+      .leftJoin('student.user', 'user')
+      .leftJoin('user.rol', 'rol')
+      .where('rol.name = :rolName', { rolName: 'Estudiante' })
+      .getCount();
 
-    const active = await this.studentRepository.count({
-      where: { isActive: true },
-    });
+    const active = await this.studentRepository
+      .createQueryBuilder('student')
+      .leftJoin('student.user', 'user')
+      .leftJoin('user.rol', 'rol')
+      .where('rol.name = :rolName', { rolName: 'Estudiante' })
+      .andWhere('student.isActive = :isActive', { isActive: true })
+      .getCount();
 
-    const inactive = await this.studentRepository.count({
-      where: { isActive: false },
-    });
+    const inactive = await this.studentRepository
+      .createQueryBuilder('student')
+      .leftJoin('student.user', 'user')
+      .leftJoin('user.rol', 'rol')
+      .where('rol.name = :rolName', { rolName: 'Estudiante' })
+      .andWhere('student.isActive = :isActive', { isActive: false })
+      .getCount();
 
     return {
       total,

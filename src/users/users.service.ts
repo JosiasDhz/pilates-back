@@ -10,6 +10,7 @@ import { isUUID } from 'class-validator';
 import * as bcrypt from 'bcrypt';
 
 import { CreateUserDto } from './dto/create-user.dto';
+import { RegisterStudentDto } from './dto/register-student.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PaginationDto } from 'src/common/dto/pagination.dto';
 import { User } from './entities/user.entity';
@@ -134,6 +135,52 @@ export class UsersService {
     return user;
   }
 
+  async registerPublicStudent(registerStudentDto: RegisterStudentDto) {
+    // Validar que el registro público solo permita crear estudiantes
+    if (!registerStudentDto.isStudent) {
+      throw new BadRequestException('Solo se pueden registrar estudiantes desde este endpoint');
+    }
+
+    // Obtener el rol de Estudiante
+    const studentRol = await this.rolRepository.findOne({
+      where: { name: 'Estudiante' },
+    });
+
+    if (!studentRol) {
+      throw new NotFoundException('Rol de Estudiante no encontrado');
+    }
+
+    // Validar que se proporcione una contraseña
+    if (!registerStudentDto.password) {
+      throw new BadRequestException('La contraseña es requerida');
+    }
+
+    // Crear un nuevo DTO con los valores correctos para CreateUserDto
+    const createUserDto: CreateUserDto = {
+      name: registerStudentDto.name,
+      lastName: registerStudentDto.lastName,
+      secondLastName: registerStudentDto.secondLastName, // Puede ser undefined, que es válido para CreateUserDto
+      email: registerStudentDto.email,
+      password: registerStudentDto.password,
+      phone: registerStudentDto.phone,
+      status: true, // Los estudiantes registrados públicamente siempre están activos
+      avatar: registerStudentDto.avatar,
+      rolId: studentRol.id, // Asignar el rolId del estudiante
+      position: undefined, // Campo opcional, no requerido para estudiantes
+      isStudent: true,
+      physicalRecord: registerStudentDto.physicalRecord,
+      medicalHistory: registerStudentDto.medicalHistory,
+      enrollmentDate: registerStudentDto.enrollmentDate,
+      assessmentComments: registerStudentDto.assessmentComments,
+      assessmentNotes: registerStudentDto.assessmentNotes,
+      language: registerStudentDto.language,
+      occupation: registerStudentDto.occupation,
+      assessmentPhotoFileIds: registerStudentDto.assessmentPhotoFileIds,
+    } as CreateUserDto; // Usar type assertion para evitar problemas de tipos opcionales
+
+    return this.createStudentUser(createUserDto);
+  }
+
   private async createStudentUser(createUserDto: CreateUserDto) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -159,13 +206,6 @@ export class UsersService {
         language,
         occupation,
       } = createUserDto;
-
-      // Validar campos requeridos para estudiante
-      if (!physicalRecord?.weight || !physicalRecord?.height) {
-        throw new BadRequestException(
-          'El peso y la altura son requeridos para crear un estudiante',
-        );
-      }
 
       // Verificar que no exista usuario con ese email
       const existingUser = await queryRunner.manager.findOne(User, {
@@ -246,16 +286,21 @@ export class UsersService {
       }
 
       // 1. Crear Aspirante con estado CONVERTED
+      // NOTA: Los campos age, language, occupation y gender son opcionales
+      // IMPORTANTE: Ejecutar la migración SQL en migrations/make-aspirant-fields-nullable.sql
+      // para hacer estos campos nullable en la base de datos
+      // Temporalmente usamos valores por defecto hasta que se ejecute la migración
       const newAspirant = queryRunner.manager.create(Aspirante, {
         firstName: name,
         lastNamePaternal: lastName,
         lastNameMaternal: secondLastName || null,
         email,
         phone,
-        age: 0, // Valor por defecto, puede ser actualizado después
-        language: language || 'Español',
-        occupation: occupation || '',
-        gender: '',
+        // Valores temporales hasta ejecutar la migración para hacer nullable estos campos
+        age: null as any, // Se convertirá a NULL después de la migración
+        language: language || (null as any), // Se convertirá a NULL después de la migración
+        occupation: occupation || (null as any), // Se convertirá a NULL después de la migración
+        gender: null as any, // Se convertirá a NULL después de la migración
         paymentMethod,
         status: convertedStatus,
         avatarId: avatarFile ? avatarFile.id : null,
@@ -264,19 +309,30 @@ export class UsersService {
       });
       const savedAspirant = await queryRunner.manager.save(Aspirante, newAspirant);
 
-      // 2. Crear historial médico si se proporciona
-      if (medicalHistory) {
+      // 2. Crear historial médico (siempre se crea para guardar el vínculo, aunque esté vacío)
         const medicalHistoryRecord = queryRunner.manager.create(AspirantMedicalHistory, {
           aspirantId: savedAspirant.id,
-          ...medicalHistory,
+        hasInjury: medicalHistory?.hasInjury || false,
+        injuryLocation: medicalHistory?.injuryLocation || null,
+        injuryTime: medicalHistory?.injuryTime || null,
+        hasPhysicalAilment: medicalHistory?.hasPhysicalAilment || false,
+        ailmentDetail: medicalHistory?.ailmentDetail || null,
+        surgeryComments: medicalHistory?.surgeryComments || null,
+        additionalInfo: medicalHistory?.additionalInfo || null,
         });
         await queryRunner.manager.save(AspirantMedicalHistory, medicalHistoryRecord);
-      }
 
-      // 3. Crear registro físico
+      // 3. Crear registro físico (siempre se crea para guardar el vínculo, aunque esté vacío)
       const physicalRecordEntity = queryRunner.manager.create(AspirantPhysicalRecord, {
         aspirantId: savedAspirant.id,
-        ...physicalRecord,
+        weight: physicalRecord?.weight || null,
+        height: physicalRecord?.height || null,
+        flexibility: physicalRecord?.flexibility || null,
+        strength: physicalRecord?.strength || null,
+        balance: physicalRecord?.balance || null,
+        posture: physicalRecord?.posture || null,
+        rangeOfMotion: physicalRecord?.rangeOfMotion || null,
+        observations: physicalRecord?.observations || null,
       });
       await queryRunner.manager.save(AspirantPhysicalRecord, physicalRecordEntity);
 
@@ -484,6 +540,44 @@ export class UsersService {
       }
     }
 
+    // Buscar si el usuario tiene un registro de estudiante asociado
+    const student = await this.studentRepository.findOne({
+      where: { userId: id },
+      relations: {
+        aspirant: {
+          physicalRecord: true,
+          medicalHistory: true,
+          assessmentPhotos: {
+            file: true,
+          },
+        },
+      },
+    });
+
+    // Agregar información del estudiante al objeto de usuario si existe
+    if (student) {
+      (userFound as any).student = {
+        id: student.id,
+        enrollmentDate: student.enrollmentDate,
+        isActive: student.isActive,
+        aspirant: {
+          id: student.aspirant.id,
+          firstName: student.aspirant.firstName,
+          lastNamePaternal: student.aspirant.lastNamePaternal,
+          lastNameMaternal: student.aspirant.lastNameMaternal,
+          age: student.aspirant.age,
+          language: student.aspirant.language,
+          occupation: student.aspirant.occupation,
+          gender: student.aspirant.gender,
+          assessmentComments: student.aspirant.assessmentComments,
+          assessmentNotes: student.aspirant.assessmentNotes,
+          physicalRecord: student.aspirant.physicalRecord,
+          medicalHistory: student.aspirant.medicalHistory,
+          assessmentPhotos: student.aspirant.assessmentPhotos,
+        },
+      };
+    }
+
     if (user.rol.name === 'Administrador') return userFound;
 
     if (userFound.id === user.id) return userFound;
@@ -494,21 +588,40 @@ export class UsersService {
   }
 
   async update(id: string, updateUserDto: UpdateUserDto, user: User) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
     let userFound: any = await this.findOne(id, user);
-    const { avatar, rolId, ...data } = updateUserDto;
+      const { 
+        avatar, 
+        rolId, 
+        isStudent,
+        physicalRecord,
+        medicalHistory,
+        enrollmentDate,
+        assessmentComments,
+        assessmentNotes,
+        language,
+        occupation,
+        assessmentPhotoFileIds,
+        ...data 
+      } = updateUserDto;
+      
     userFound = { ...userFound, ...data };
 
     if (updateUserDto.password) {
-      delete updateUserDto.password;
       userFound.password = bcrypt.hashSync(updateUserDto.password, 10);
     }
 
+      let newRol: Rol | null = null;
     if (rolId) {
       if (!isUUID(updateUserDto.rolId))
         throw new BadRequestException('Proporciona un UUID valido');
 
-      const rol = await this.rolRepository.findOneBy({
-        id: updateUserDto.rolId,
+        const rol = await queryRunner.manager.findOne(Rol, {
+          where: { id: updateUserDto.rolId },
       });
 
       if (!rol)
@@ -516,12 +629,13 @@ export class UsersService {
           `Rol con id ${updateUserDto.rolId} no encontrado`,
         );
 
+        newRol = rol;
       userFound.rol = rol;
     }
 
     if (avatar) {
-      const file = await this.fileRepository.findOneBy({
-        id: updateUserDto.avatar,
+        const file = await queryRunner.manager.findOne(File, {
+          where: { id: updateUserDto.avatar },
       });
       if (!file)
         throw new NotFoundException(
@@ -532,14 +646,213 @@ export class UsersService {
 
     userFound.name = this.normalizeName(userFound.name);
     userFound.lastName = this.normalizeName(userFound.lastName);
-    userFound.secondLastName = userFound.secondLastName ? this.normalizeName(userFound.secondLastName) : null;
-    if (userFound.email) {
-      userFound.email = userFound.email.toLowerCase().trim();
-    }
+      userFound.secondLastName = userFound.secondLastName ? this.normalizeName(userFound.secondLastName) : null;
+      if (userFound.email) {
+    userFound.email = userFound.email.toLowerCase().trim();
+      }
 
-    const { affected } = await this.userRepository.update({ id }, userFound);
+      // Eliminar la propiedad 'student' que agregamos manualmente en findOne
+      // ya que no es parte de la entidad User y causaría error al guardar
+      const { student, ...userToSave } = userFound;
+      
+      await queryRunner.manager.save(User, userToSave);
 
+      // Verificar si el nuevo rol es "Estudiante" o si isStudent es true
+      const estudianteRol = newRol || userFound.rol;
+      const isEstudianteRol = estudianteRol?.name === 'Estudiante';
+      const shouldCreateStudent = isEstudianteRol && (isStudent !== false);
+
+      if (shouldCreateStudent) {
+        // Verificar si ya existe un registro de estudiante
+        const existingStudent = await queryRunner.manager.findOne(Student, {
+          where: { userId: id },
+          relations: ['aspirant'],
+        });
+
+        if (!existingStudent) {
+          // Crear nuevo registro de estudiante para usuario existente
+          // Obtener estado CONVERTED
+          const convertedStatus = await queryRunner.manager.findOne(AspirantStatus, {
+            where: { code: 'CONVERTED' },
+          });
+
+          if (!convertedStatus) {
+            throw new NotFoundException(
+              'Estado CONVERTED no encontrado. Por favor, crea los estados iniciales.',
+            );
+          }
+
+          // Obtener método de pago por defecto
+          const paymentMethod = await queryRunner.manager.findOne(PaymentMethod, {
+            where: { status: true },
+          });
+
+          if (!paymentMethod) {
+            throw new NotFoundException(
+              'No se encontró un método de pago activo. Por favor, crea uno primero.',
+            );
+          }
+
+          // Obtener archivo de avatar si existe
+          let avatarFile: File | null = null;
+          const avatarId = avatar || userFound.avatar?.id;
+          if (avatarId) {
+            avatarFile = await queryRunner.manager.findOne(File, {
+              where: { id: avatarId },
+            });
+          }
+
+          // 1. Crear Aspirante con estado CONVERTED
+          const newAspirant = queryRunner.manager.create(Aspirante, {
+            firstName: userFound.name,
+            lastNamePaternal: userFound.lastName,
+            lastNameMaternal: userFound.secondLastName || null,
+            email: userFound.email,
+            phone: userFound.phone || '',
+            age: null as any,
+            language: language || (null as any),
+            occupation: occupation || (null as any),
+            gender: null as any,
+            paymentMethod,
+            status: convertedStatus,
+            avatarId: avatarFile ? avatarFile.id : null,
+            assessmentComments: assessmentComments || null,
+            assessmentNotes: assessmentNotes || null,
+          });
+          const savedAspirant = await queryRunner.manager.save(Aspirante, newAspirant);
+
+          // 2. Crear historial médico
+          const medicalHistoryRecord = queryRunner.manager.create(AspirantMedicalHistory, {
+            aspirantId: savedAspirant.id,
+            hasInjury: medicalHistory?.hasInjury || false,
+            injuryLocation: medicalHistory?.injuryLocation || null,
+            injuryTime: medicalHistory?.injuryTime || null,
+            hasPhysicalAilment: medicalHistory?.hasPhysicalAilment || false,
+            ailmentDetail: medicalHistory?.ailmentDetail || null,
+            surgeryComments: medicalHistory?.surgeryComments || null,
+            additionalInfo: medicalHistory?.additionalInfo || null,
+          });
+          await queryRunner.manager.save(AspirantMedicalHistory, medicalHistoryRecord);
+
+          // 3. Crear registro físico
+          const physicalRecordEntity = queryRunner.manager.create(AspirantPhysicalRecord, {
+            aspirantId: savedAspirant.id,
+            weight: physicalRecord?.weight || null,
+            height: physicalRecord?.height || null,
+            flexibility: physicalRecord?.flexibility || null,
+            strength: physicalRecord?.strength || null,
+            balance: physicalRecord?.balance || null,
+            posture: physicalRecord?.posture || null,
+            rangeOfMotion: physicalRecord?.rangeOfMotion || null,
+            observations: physicalRecord?.observations || null,
+          });
+          await queryRunner.manager.save(AspirantPhysicalRecord, physicalRecordEntity);
+
+          // 4. Crear fotos de valoración si se proporcionan
+          if (assessmentPhotoFileIds && assessmentPhotoFileIds.length > 0) {
+            for (const fileId of assessmentPhotoFileIds) {
+              const file = await queryRunner.manager.findOne(File, {
+                where: { id: fileId },
+              });
+              if (file) {
+                const assessmentPhoto = queryRunner.manager.create(AspirantAssessmentPhoto, {
+                  aspirantId: savedAspirant.id,
+                  fileId: fileId,
+                });
+                await queryRunner.manager.save(AspirantAssessmentPhoto, assessmentPhoto);
+              }
+            }
+          }
+
+          // 5. Crear Student vinculado con User existente y Aspirante
+          const finalEnrollmentDate = enrollmentDate ? new Date(enrollmentDate) : new Date();
+          const newStudent = queryRunner.manager.create(Student, {
+            userId: id,
+            aspirantId: savedAspirant.id,
+            enrollmentDate: finalEnrollmentDate,
+            isActive: true,
+          });
+          const savedStudent = await queryRunner.manager.save(Student, newStudent);
+
+          // 6. Crear primer registro en StudentStatusHistory
+          const initialStatusHistory = queryRunner.manager.create(StudentStatusHistory, {
+            studentId: savedStudent.id,
+            status: StudentStatus.ACTIVE,
+            startDate: finalEnrollmentDate,
+            endDate: null,
+            reason: 'Ingreso desde actualización de usuario',
+          });
+          await queryRunner.manager.save(StudentStatusHistory, initialStatusHistory);
+        } else {
+          // Actualizar registro existente de aspirante si se proporcionan datos
+          const aspirant = existingStudent.aspirant;
+          
+          if (language !== undefined) aspirant.language = language || null;
+          if (occupation !== undefined) aspirant.occupation = occupation || null;
+          if (assessmentComments !== undefined) aspirant.assessmentComments = assessmentComments || null;
+          if (assessmentNotes !== undefined) aspirant.assessmentNotes = assessmentNotes || null;
+          
+          await queryRunner.manager.save(Aspirante, aspirant);
+
+          // Actualizar registro físico si se proporciona
+          if (physicalRecord) {
+            const physicalRecordEntity = await queryRunner.manager.findOne(
+              AspirantPhysicalRecord,
+              { where: { aspirantId: aspirant.id } }
+            );
+            
+            if (physicalRecordEntity) {
+              Object.assign(physicalRecordEntity, {
+                weight: physicalRecord.weight ?? physicalRecordEntity.weight,
+                height: physicalRecord.height ?? physicalRecordEntity.height,
+                flexibility: physicalRecord.flexibility ?? physicalRecordEntity.flexibility,
+                strength: physicalRecord.strength ?? physicalRecordEntity.strength,
+                balance: physicalRecord.balance ?? physicalRecordEntity.balance,
+                posture: physicalRecord.posture ?? physicalRecordEntity.posture,
+                rangeOfMotion: physicalRecord.rangeOfMotion ?? physicalRecordEntity.rangeOfMotion,
+                observations: physicalRecord.observations ?? physicalRecordEntity.observations,
+              });
+              await queryRunner.manager.save(AspirantPhysicalRecord, physicalRecordEntity);
+            }
+          }
+
+          // Actualizar historial médico si se proporciona
+          if (medicalHistory) {
+            const medicalHistoryEntity = await queryRunner.manager.findOne(
+              AspirantMedicalHistory,
+              { where: { aspirant: { id: aspirant.id } } }
+            );
+            
+            if (medicalHistoryEntity) {
+              Object.assign(medicalHistoryEntity, {
+                hasInjury: medicalHistory.hasInjury ?? medicalHistoryEntity.hasInjury,
+                injuryLocation: medicalHistory.injuryLocation ?? medicalHistoryEntity.injuryLocation,
+                injuryTime: medicalHistory.injuryTime ?? medicalHistoryEntity.injuryTime,
+                hasPhysicalAilment: medicalHistory.hasPhysicalAilment ?? medicalHistoryEntity.hasPhysicalAilment,
+                ailmentDetail: medicalHistory.ailmentDetail ?? medicalHistoryEntity.ailmentDetail,
+                surgeryComments: medicalHistory.surgeryComments ?? medicalHistoryEntity.surgeryComments,
+                additionalInfo: medicalHistory.additionalInfo ?? medicalHistoryEntity.additionalInfo,
+              });
+              await queryRunner.manager.save(AspirantMedicalHistory, medicalHistoryEntity);
+            }
+          }
+
+          // Actualizar enrollmentDate si se proporciona
+          if (enrollmentDate) {
+            existingStudent.enrollmentDate = new Date(enrollmentDate);
+            await queryRunner.manager.save(Student, existingStudent);
+          }
+        }
+      }
+
+      await queryRunner.commitTransaction();
     return { message: `Usuario actualizado` };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async remove(id: string) {
