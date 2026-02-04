@@ -23,7 +23,12 @@ export class CreateEventDto {
   @IsString()
   @IsOptional()
   @MaxLength(32)
-  duration?: string;
+  endTime?: string | null;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(32)
+  duration?: string | null;
 
   @IsString()
   @IsIn(EVENT_TYPES)

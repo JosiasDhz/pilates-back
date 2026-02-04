@@ -240,8 +240,36 @@ export class StudentClassRegistrationsService {
     return registration;
   }
 
-  async findByStudent(studentId: string) {
-    return await this.findAll(studentId);
+  async findByStudent(studentId: string, month?: number, year?: number) {
+    const query = this.registrationRepository
+      .createQueryBuilder('registration')
+      .leftJoinAndSelect('registration.student', 'student')
+      .leftJoinAndSelect('registration.event', 'event')
+      .leftJoinAndSelect('event.studio', 'studio')
+      .leftJoinAndSelect('event.instructor', 'instructor')
+      .leftJoinAndSelect('instructor.employee', 'employee')
+      .leftJoinAndSelect('employee.user', 'instructorUser')
+      .where('registration.studentId = :studentId', { studentId })
+      .andWhere('registration.status IN (:...statuses)', {
+        statuses: [RegistrationStatus.PENDING, RegistrationStatus.CONFIRMED],
+      });
+
+    // Filtrar por mes y año si se proporcionan
+    if (month !== undefined && year !== undefined) {
+      // Crear rango de fechas para el mes
+      // month viene como 1-12, así que month - 1 es el índice del mes (0-11)
+      const startDate = new Date(year, month - 1, 1);
+      // new Date(year, month, 0) da el último día del mes anterior (month - 1)
+      const endDate = new Date(year, month, 0);
+      
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+      
+      query.andWhere('event.date >= :startDate', { startDate: startDateStr });
+      query.andWhere('event.date <= :endDate', { endDate: endDateStr });
+    }
+
+    return await query.orderBy('event.date', 'ASC').addOrderBy('event.time', 'ASC').getMany();
   }
 
   async findByUserId(userId: string, status?: RegistrationStatus) {

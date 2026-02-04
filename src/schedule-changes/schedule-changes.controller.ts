@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import { ScheduleChangesService } from './schedule-changes.service';
 import { CreateScheduleChangeRequestDto } from './dto/create-schedule-change-request.dto';
+import { RescheduleImmediateDto } from './dto/reschedule-immediate.dto';
+import { RescheduleImmediateBulkDto } from './dto/reschedule-immediate-bulk.dto';
 import { UpdateScheduleChangeRequestDto } from './dto/update-schedule-change-request.dto';
 import { CreateWaitlistDto } from './dto/create-waitlist.dto';
 import { UpdateWaitlistDto } from './dto/update-waitlist.dto';
@@ -31,6 +33,41 @@ export class ScheduleChangesController {
     private readonly scheduleChangesService: ScheduleChangesService,
     private readonly studentsService: StudentsService,
   ) {}
+
+  @Post('reschedule-immediate')
+  @UsePipes(new ValidationPipe())
+  @Auth()
+  async rescheduleImmediate(
+    @Body() dto: RescheduleImmediateDto,
+    @GetUser() user: User,
+  ) {
+    const student = await this.studentsService.findByUserId(user.id);
+    if (!student) {
+      throw new NotFoundException('Estudiante no encontrado para este usuario');
+    }
+    return this.scheduleChangesService.executeRescheduleImmediate(
+      student.id,
+      dto.originalEventId,
+      dto.newEventId,
+    );
+  }
+
+  @Post('reschedule-immediate-bulk')
+  @UsePipes(new ValidationPipe())
+  @Auth()
+  async rescheduleImmediateBulk(
+    @Body() dto: RescheduleImmediateBulkDto,
+    @GetUser() user: User,
+  ) {
+    const student = await this.studentsService.findByUserId(user.id);
+    if (!student) {
+      throw new NotFoundException('Estudiante no encontrado para este usuario');
+    }
+    return this.scheduleChangesService.executeRescheduleImmediateBulk(
+      student.id,
+      dto.pairs,
+    );
+  }
 
   @Post('request')
   @UsePipes(new ValidationPipe())

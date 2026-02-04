@@ -8,12 +8,14 @@ import { FilesModule } from 'src/files/files.module';
 import { UsersModule } from 'src/users/users.module';
 import { PaymentMethodsModule } from 'src/payment-methods/payment-methods.module';
 import { AuthModule } from 'src/auth/auth.module';
+import { Aspirante } from 'src/aspirantes/entities/aspirante.entity';
+import { Student } from 'src/students/entities/student.entity';
 
 @Module({
   controllers: [PaymentsController],
   providers: [PaymentsService],
   imports: [
-    TypeOrmModule.forFeature([Payment, PaymentEvidence]),
+    TypeOrmModule.forFeature([Payment, PaymentEvidence, Aspirante, Student]),
     FilesModule,
     UsersModule,
     PaymentMethodsModule,

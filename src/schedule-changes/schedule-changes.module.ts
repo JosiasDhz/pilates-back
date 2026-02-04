@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleChangesService } from './schedule-changes.service';
 import { ScheduleChangesController } from './schedule-changes.controller';
+import { ScheduleChangesCron } from './schedule-changes.cron';
 import { ScheduleChangeRequest } from './entities/schedule-change-request.entity';
 import { Waitlist } from './entities/waitlist.entity';
 import { StudentJokers } from './entities/student-jokers.entity';
@@ -27,7 +28,7 @@ import { StudentsModule } from 'src/students/students.module';
     StudentsModule,
   ],
   controllers: [ScheduleChangesController],
-  providers: [ScheduleChangesService],
+  providers: [ScheduleChangesService, ScheduleChangesCron],
   exports: [TypeOrmModule, ScheduleChangesService],
 })
 export class ScheduleChangesModule {}

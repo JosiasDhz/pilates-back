@@ -36,6 +36,9 @@ export class Studio {
   @Column({ type: 'int', default: 0, name: 'capacity_semiprivate' })
   capacitySemiprivate: number;
 
+  @Column({ type: 'int', default: 0, name: 'capacity_valoracion' })
+  capacityValoracion: number;
+
   @Column({ type: 'boolean', default: true })
   status: boolean;
 

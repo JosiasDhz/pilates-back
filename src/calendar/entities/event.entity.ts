@@ -30,8 +30,11 @@ export class Event {
   @Column({ type: 'varchar', length: 32 })
   time: string;
 
-  @Column({ type: 'varchar', length: 32, default: '1 hour' })
-  duration: string;
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  endTime: string | null;
+
+  @Column({ type: 'varchar', length: 32, default: '1 hour', nullable: true })
+  duration: string | null;
 
   @Column({ type: 'varchar', length: 64 })
   type: EventType;

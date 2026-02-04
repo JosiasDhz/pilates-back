@@ -49,6 +49,7 @@ export class StudiosService {
       capacity: dto.capacity,
       capacityPrivate: dto.capacityPrivate,
       capacitySemiprivate: dto.capacitySemiprivate,
+      capacityValoracion: dto.capacityValoracion,
       status: dto.status ?? true,
       ...(file && { image: file }),
     });
@@ -127,6 +128,7 @@ export class StudiosService {
     if (dto.capacity != null) studio.capacity = dto.capacity;
     if (dto.capacityPrivate != null) studio.capacityPrivate = dto.capacityPrivate;
     if (dto.capacitySemiprivate != null) studio.capacitySemiprivate = dto.capacitySemiprivate;
+    if (dto.capacityValoracion != null) studio.capacityValoracion = dto.capacityValoracion;
     if (dto.status !== undefined) studio.status = dto.status;
 
     if (dto.image !== undefined) {

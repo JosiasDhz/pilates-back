@@ -4,6 +4,7 @@ import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { ChangeStatusDto } from './dto/change-status.dto';
 import { PaginateStudentDto } from './dto/paginate-student.dto';
+import { ClassSelectionDto } from './dto/class-selection.dto';
 import { Auth } from 'src/auth/decorators/auth.decorator';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
 import { User } from 'src/users/entities/user.entity';
@@ -55,6 +56,35 @@ export class StudentsController {
     @Body() changeStatusDto: ChangeStatusDto,
   ) {
     return this.studentsService.changeStatus(id, changeStatusDto);
+  }
+
+  @Post(':id/class-selection')
+  @UsePipes(new ValidationPipe({ 
+    whitelist: true, 
+    forbidNonWhitelisted: true,
+    transform: true,
+    transformOptions: {
+      enableImplicitConversion: true,
+    },
+  }))
+  selectClasses(
+    @Param('id') id: string,
+    @Body() classSelectionDto: ClassSelectionDto,
+  ) {
+    console.log('=== CLASS SELECTION REQUEST ===');
+    console.log('URL param id:', id, 'type:', typeof id);
+    console.log('Body received:', JSON.stringify(classSelectionDto, null, 2));
+    
+    // Asegurar que el studentId del DTO coincida con el parámetro de la URL
+    // El studentId viene del parámetro de la URL, no del body
+    const finalDto: ClassSelectionDto = {
+      ...classSelectionDto,
+      studentId: id, // Siempre usar el id de la URL
+    };
+    
+    console.log('Final DTO:', JSON.stringify(finalDto, null, 2));
+    
+    return this.studentsService.selectClasses(finalDto);
   }
 
   @Delete(':id')

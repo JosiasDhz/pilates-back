@@ -42,6 +42,11 @@ export class CreateStudioDto {
   @Type(() => Number)
   capacitySemiprivate: number;
 
+  @IsInt()
+  @Min(0)
+  @Type(() => Number)
+  capacityValoracion: number;
+
   @IsBoolean()
   @IsOptional()
   @Type(() => Boolean)

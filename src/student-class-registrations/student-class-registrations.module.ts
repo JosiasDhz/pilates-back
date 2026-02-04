@@ -7,7 +7,6 @@ import { Student } from 'src/students/entities/student.entity';
 import { Event } from 'src/calendar/entities/event.entity';
 import { Studio } from 'src/studios/entities/studio.entity';
 import { AuthModule } from 'src/auth/auth.module';
-import { StudentsModule } from 'src/students/students.module';
 
 @Module({
   imports: [
@@ -18,7 +17,6 @@ import { StudentsModule } from 'src/students/students.module';
       Studio,
     ]),
     AuthModule,
-    StudentsModule,
   ],
   controllers: [StudentClassRegistrationsController],
   providers: [StudentClassRegistrationsService],

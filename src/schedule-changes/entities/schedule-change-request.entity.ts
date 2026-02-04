@@ -85,6 +85,12 @@ export class ScheduleChangeRequest {
   @Column({ type: 'timestamptz', nullable: true })
   requestedDate: Date | null; // Fecha solicitada para el cambio
 
+  @Column({ type: 'date', nullable: true })
+  leaveStartDate: Date | null; // Fecha de inicio de baja temporal
+
+  @Column({ type: 'jsonb', nullable: true })
+  travelFeeDates: string[] | null; // Días solicitados para tarifa de viaje (YYYY-MM-DD)
+
   @Column({ type: 'timestamptz', nullable: true })
   approvedAt: Date | null;
 

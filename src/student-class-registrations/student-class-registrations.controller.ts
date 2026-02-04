@@ -56,8 +56,14 @@ export class StudentClassRegistrationsController {
   }
 
   @Get('student/:studentId')
-  findByStudent(@Param('studentId') studentId: string) {
-    return this.registrationsService.findByStudent(studentId);
+  findByStudent(
+    @Param('studentId') studentId: string,
+    @Query('month') month?: string,
+    @Query('year') year?: string,
+  ) {
+    const monthNum = month ? parseInt(month, 10) : undefined;
+    const yearNum = year ? parseInt(year, 10) : undefined;
+    return this.registrationsService.findByStudent(studentId, monthNum, yearNum);
   }
 
   @Get('event/:eventId')

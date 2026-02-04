@@ -1,5 +1,6 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { LoggerMiddleware } from './utils/logger.middleware';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
@@ -30,10 +31,12 @@ import { AspirantAssessmentPhotoModule } from './aspirant-assessment-photo/aspir
 import { StudentsModule } from './students/students.module';
 import { StudentClassRegistrationsModule } from './student-class-registrations/student-class-registrations.module';
 import { ScheduleChangesModule } from './schedule-changes/schedule-changes.module';
+import { StudentAssessmentsModule } from './student-assessments/student-assessments.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot(),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRoot(getTypeOrmConfig()),
     TypeOrmModule.forFeature([AspirantStatus, PaymentMethod, Studio]),
     AuthModule,
@@ -59,6 +62,7 @@ import { ScheduleChangesModule } from './schedule-changes/schedule-changes.modul
     StudentsModule,
     StudentClassRegistrationsModule,
     ScheduleChangesModule,
+    StudentAssessmentsModule,
   ],
   controllers: [],
   providers: [AppService],

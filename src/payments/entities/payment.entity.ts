@@ -77,4 +77,12 @@ export class Payment {
     cascade: true,
   })
   evidences: PaymentEvidence[];
+
+  @Column({ type: 'jsonb', nullable: true })
+  classSelectionData: {
+    selectedDayTimePairs?: Array<{ dayOfWeek: number; time: string }>;
+    month?: number;
+    year?: number;
+    hasMembership?: boolean;
+  } | null;
 }

@@ -7,6 +7,7 @@ import {
   IsBoolean,
   IsNumber,
   Min,
+  IsArray,
 } from 'class-validator';
 import { ChangeRequestType } from '../entities/schedule-change-request.entity';
 
@@ -31,6 +32,15 @@ export class CreateScheduleChangeRequestDto {
   @IsDateString()
   @IsOptional()
   requestedDate?: string;
+
+  @IsDateString()
+  @IsOptional()
+  leaveStartDate?: string; // Fecha de inicio de baja temporal (formato YYYY-MM-DD)
+
+  @IsArray()
+  @IsDateString({}, { each: true })
+  @IsOptional()
+  travelFeeDates?: string[]; // Días seleccionados para tarifa de viaje (formato YYYY-MM-DD)
 
   @IsBoolean()
   @IsOptional()

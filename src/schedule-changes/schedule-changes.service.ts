@@ -197,6 +197,58 @@ export class ScheduleChangesService {
       throw new NotFoundException('Estudiante no encontrado');
     }
 
+    // Para baja temporal, no necesitamos validar evento original específico
+    // Solo necesitamos que el estudiante exista y tenga una fecha de inicio
+    if (createDto.requestType === ChangeRequestType.TEMPORARY_LEAVE) {
+      if (!createDto.leaveStartDate) {
+        throw new BadRequestException(
+          'La fecha de inicio de la baja temporal es requerida',
+        );
+      }
+
+      // Buscar cualquier registro del estudiante para usar como referencia
+      const anyRegistration = await this.registrationRepository.findOne({
+        where: {
+          studentId: createDto.studentId,
+          status: In([RegistrationStatus.PENDING, RegistrationStatus.CONFIRMED]),
+        },
+      });
+
+      if (!anyRegistration) {
+        throw new BadRequestException(
+          'El estudiante no tiene clases registradas',
+        );
+      }
+
+      // Usar el evento de cualquier registro como referencia
+      const originalEvent = await this.eventRepository.findOne({
+        where: { id: anyRegistration.eventId },
+        relations: ['studio'],
+      });
+
+      if (!originalEvent) {
+        throw new NotFoundException('No se pudo encontrar un evento de referencia');
+      }
+
+      // Crear la solicitud con el evento de referencia
+      const leaveStartDate = new Date(createDto.leaveStartDate);
+      leaveStartDate.setHours(0, 0, 0, 0);
+
+      const changeRequest = this.changeRequestRepository.create({
+        studentId: createDto.studentId,
+        originalEventId: originalEvent.id,
+        requestType: ChangeRequestType.TEMPORARY_LEAVE,
+        reason: createDto.reason || null,
+        leaveStartDate,
+        status: ChangeRequestStatus.PENDING,
+        usesJoker: false,
+        requires24Hours: false,
+      });
+
+      return await this.changeRequestRepository.save(changeRequest);
+    }
+
+    // Para otros tipos de solicitud, validar evento original
     const originalEvent = await this.eventRepository.findOne({
       where: { id: createDto.originalEventId },
       relations: ['studio'],
@@ -348,12 +400,22 @@ export class ScheduleChangesService {
       }
     }
 
+    // Convertir leaveStartDate de string a Date si existe
+    let leaveStartDate: Date | null = null;
+    if (createDto.leaveStartDate) {
+      leaveStartDate = new Date(createDto.leaveStartDate);
+      // Asegurar que sea solo la fecha (sin hora)
+      leaveStartDate.setHours(0, 0, 0, 0);
+    }
+
     const changeRequest = this.changeRequestRepository.create({
       ...createDto,
       newEventId: newEvent?.id || null,
       usesJoker,
       requires24Hours,
       travelFeeAmount,
+      leaveStartDate,
+      travelFeeDates: createDto.travelFeeDates ?? null,
       status: ChangeRequestStatus.PENDING,
     });
 
@@ -421,41 +483,24 @@ export class ScheduleChangesService {
           break;
 
         case ChangeRequestType.RESCHEDULE:
-          // Reagendar: cancelar el registro original y crear uno nuevo
+          // Reagendar: solo actualizar la fecha de la inscripción (mismo registro, otro evento)
           if (!changeRequest.newEventId) {
             throw new BadRequestException('Se requiere un nuevo evento para reagendar');
           }
 
-          originalRegistration.status = RegistrationStatus.CANCELLED;
-          await queryRunner.manager.save(originalRegistration);
-
-          // Crear nuevo registro
-          const newRegistration = this.registrationRepository.create({
-            studentId: changeRequest.studentId,
-            eventId: changeRequest.newEventId,
-            paymentModality: originalRegistration.paymentModality,
-            calculatedCost: originalRegistration.calculatedCost,
-            currency: originalRegistration.currency,
-            status: RegistrationStatus.CONFIRMED,
-            billingPeriod: originalRegistration.billingPeriod,
-            registrationDate: new Date(),
-          });
-
-          await queryRunner.manager.save(newRegistration);
-
-          // Actualizar attendees en eventos
           await this.updateEventAttendees(
             changeRequest.originalEventId,
             changeRequest.studentId,
             'remove',
           );
+          originalRegistration.eventId = changeRequest.newEventId!;
+          await queryRunner.manager.save(originalRegistration);
           await this.updateEventAttendees(
-            changeRequest.newEventId!,
+            changeRequest.newEventId,
             changeRequest.studentId,
             'add',
           );
 
-          // Actualizar la lista de espera: marcar como registrado si existe
           const waitlistEntry = await queryRunner.manager.findOne(Waitlist, {
             where: {
               studentId: changeRequest.studentId,
@@ -487,6 +532,221 @@ export class ScheduleChangesService {
       await queryRunner.commitTransaction();
 
       return await this.findOneChangeRequest(id);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * Reagendamiento inmediato: solo actualiza la fecha/clase de la inscripción existente.
+   * No crea ni elimina registros: cambia eventId de la misma inscripción y actualiza attendees.
+   * Solo mismo mes.
+   */
+  async executeRescheduleImmediate(
+    studentId: string,
+    originalEventId: string,
+    newEventId: string,
+  ) {
+    const originalEvent = await this.eventRepository.findOne({
+      where: { id: originalEventId },
+      relations: ['studio'],
+    });
+    if (!originalEvent) {
+      throw new NotFoundException('Evento original no encontrado');
+    }
+
+    const newEvent = await this.eventRepository.findOne({
+      where: { id: newEventId },
+      relations: ['studio'],
+    });
+    if (!newEvent) {
+      throw new NotFoundException('Nuevo evento no encontrado');
+    }
+
+    const origDate = new Date(originalEvent.date);
+    const newDate = new Date(newEvent.date);
+    if (
+      origDate.getMonth() !== newDate.getMonth() ||
+      origDate.getFullYear() !== newDate.getFullYear()
+    ) {
+      throw new BadRequestException(
+        'Solo puedes reagendar dentro del mismo mes',
+      );
+    }
+
+    const registration = await this.registrationRepository.findOne({
+      where: {
+        studentId,
+        eventId: originalEventId,
+        status: In([RegistrationStatus.PENDING, RegistrationStatus.CONFIRMED]),
+      },
+    });
+    if (!registration) {
+      throw new BadRequestException(
+        'El estudiante no está registrado en la clase original',
+      );
+    }
+
+    const isAvailable = await this.checkAvailability(newEvent);
+    if (!isAvailable) {
+      throw new BadRequestException(
+        'No hay disponibilidad en la clase destino. Usa solicitud de cambio para lista de espera.',
+      );
+    }
+
+    const canReschedule = await this.canReschedule(
+      studentId,
+      originalEventId,
+      newEventId,
+    );
+    if (!canReschedule.canReschedule) {
+      throw new BadRequestException(
+        canReschedule.reason || 'No se puede reagendar en este momento',
+      );
+    }
+
+    await this.updateEventAttendees(originalEventId, studentId, 'remove');
+    registration.eventId = newEventId;
+    await this.registrationRepository.save(registration);
+    await this.updateEventAttendees(newEventId, studentId, 'add');
+
+    if (canReschedule.requiresJoker) {
+      const year = origDate.getFullYear();
+      const month = origDate.getMonth() + 1;
+      const jokers = await this.getOrCreateJokers(studentId, year, month);
+      jokers.usedJokers += 1;
+      await this.jokersRepository.save(jokers);
+    }
+
+    return {
+      success: true,
+      message: 'Horario actualizado correctamente',
+      registrationId: registration.id,
+    };
+  }
+
+  /**
+   * Reagendamiento inmediato en lote (varios pares). Un solo comodín por todo el reagendamiento.
+   */
+  async executeRescheduleImmediateBulk(
+    studentId: string,
+    pairs: Array<{ originalEventId: string; newEventId: string }>,
+  ) {
+    if (!pairs?.length) {
+      throw new BadRequestException('Se requiere al menos un par para reagendar');
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    let requiresJokerOnce = false;
+    const newRegistrationIds: string[] = [];
+
+    try {
+      for (const { originalEventId, newEventId } of pairs) {
+        const originalEvent = await this.eventRepository.findOne({
+          where: { id: originalEventId },
+          relations: ['studio'],
+        });
+        if (!originalEvent) {
+          throw new NotFoundException(
+            `Evento original no encontrado: ${originalEventId}`,
+          );
+        }
+
+        const newEvent = await this.eventRepository.findOne({
+          where: { id: newEventId },
+          relations: ['studio'],
+        });
+        if (!newEvent) {
+          throw new NotFoundException(
+            `Nuevo evento no encontrado: ${newEventId}`,
+          );
+        }
+
+        const origDate = new Date(originalEvent.date);
+        const newDate = new Date(newEvent.date);
+        if (
+          origDate.getMonth() !== newDate.getMonth() ||
+          origDate.getFullYear() !== newDate.getFullYear()
+        ) {
+          throw new BadRequestException(
+            'Solo puedes reagendar dentro del mismo mes',
+          );
+        }
+
+        const registration = await queryRunner.manager
+          .getRepository(StudentClassRegistration)
+          .findOne({
+            where: {
+              studentId,
+              eventId: originalEventId,
+              status: In([
+                RegistrationStatus.PENDING,
+                RegistrationStatus.CONFIRMED,
+              ]),
+            },
+          });
+        if (!registration) {
+          throw new BadRequestException(
+            `No estás registrado en la clase original: ${originalEventId}`,
+          );
+        }
+
+        const isAvailable = await this.checkAvailability(newEvent);
+        if (!isAvailable) {
+          throw new BadRequestException(
+            'No hay disponibilidad en la clase destino. Usa solicitud de cambio para lista de espera.',
+          );
+        }
+
+        const canReschedule = await this.canReschedule(
+          studentId,
+          originalEventId,
+          newEventId,
+        );
+        if (!canReschedule.canReschedule) {
+          throw new BadRequestException(
+            canReschedule.reason || 'No se puede reagendar en este momento',
+          );
+        }
+        if (canReschedule.requiresJoker) {
+          requiresJokerOnce = true;
+        }
+
+        await this.updateEventAttendees(originalEventId, studentId, 'remove');
+        registration.eventId = newEventId;
+        await queryRunner.manager.save(registration);
+        newRegistrationIds.push(registration.id);
+        await this.updateEventAttendees(newEventId, studentId, 'add');
+      }
+
+      if (requiresJokerOnce) {
+        const firstOrig = await this.eventRepository.findOne({
+          where: { id: pairs[0].originalEventId },
+        });
+        if (firstOrig) {
+          const d = new Date(firstOrig.date);
+          const jokers = await this.getOrCreateJokers(
+            studentId,
+            d.getFullYear(),
+            d.getMonth() + 1,
+          );
+          jokers.usedJokers += 1;
+          await this.jokersRepository.save(jokers);
+        }
+      }
+
+      await queryRunner.commitTransaction();
+      return {
+        success: true,
+        message: 'Horario actualizado correctamente',
+        registrationIds: newRegistrationIds,
+      };
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -798,7 +1058,8 @@ export class ScheduleChangesService {
   }
 
   /**
-   * Actualizar attendees en eventos
+   * Actualizar attendees en eventos (nuevo array para que jsonb persista el cambio).
+   * Quitar al estudiante libera el cupo; agregarlo lo ocupa.
    */
   private async updateEventAttendees(
     eventId: string,
@@ -813,20 +1074,94 @@ export class ScheduleChangesService {
       return;
     }
 
-    const attendees = event.attendees || [];
+    const current = event.attendees || [];
 
     if (action === 'add') {
-      if (!attendees.includes(studentId)) {
-        attendees.push(studentId);
+      if (!current.includes(studentId)) {
+        event.attendees = [...current, studentId];
       }
     } else {
-      const index = attendees.indexOf(studentId);
-      if (index > -1) {
-        attendees.splice(index, 1);
+      event.attendees = current.filter((id) => id !== studentId);
+    }
+
+    await this.eventRepository.save(event);
+  }
+
+  /**
+   * Procesa las bajas temporales: cancela todas las registraciones futuras
+   * de estudiantes que tienen una baja temporal aprobada cuya fecha de inicio ya llegó
+   */
+  async processTemporaryLeaves() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Buscar todas las solicitudes de baja temporal aprobadas cuya fecha de inicio ya llegó
+    const approvedLeaves = await this.changeRequestRepository.find({
+      where: {
+        requestType: ChangeRequestType.TEMPORARY_LEAVE,
+        status: ChangeRequestStatus.APPROVED,
+      },
+      relations: ['student'],
+    });
+
+    let processedCount = 0;
+    let cancelledRegistrationsCount = 0;
+
+    for (const leave of approvedLeaves) {
+      if (!leave.leaveStartDate) {
+        continue;
+      }
+
+      const leaveStartDate = new Date(leave.leaveStartDate);
+      leaveStartDate.setHours(0, 0, 0, 0);
+
+      // Solo procesar si la fecha de inicio ya llegó
+      if (leaveStartDate.getTime() <= today.getTime()) {
+        // Buscar todas las registraciones futuras del estudiante (desde la fecha de inicio)
+        const futureRegistrations = await this.registrationRepository.find({
+          where: {
+            studentId: leave.studentId,
+            status: In([RegistrationStatus.PENDING, RegistrationStatus.CONFIRMED]),
+          },
+          relations: ['event'],
+        });
+
+        // Filtrar solo las que son desde la fecha de inicio en adelante
+        const registrationsToCancel = futureRegistrations.filter((reg) => {
+          if (!reg.event?.date) return false;
+          const eventDate = new Date(reg.event.date);
+          eventDate.setHours(0, 0, 0, 0);
+          return eventDate.getTime() >= leaveStartDate.getTime();
+        });
+
+        // Cancelar las registraciones y remover de attendees
+        for (const registration of registrationsToCancel) {
+          registration.status = RegistrationStatus.CANCELLED;
+          await this.registrationRepository.save(registration);
+
+          // Remover de attendees del evento
+          if (registration.eventId) {
+            await this.updateEventAttendees(
+              registration.eventId,
+              leave.studentId,
+              'remove',
+            );
+          }
+
+          cancelledRegistrationsCount++;
+        }
+
+        // Marcar la solicitud como completada
+        leave.status = ChangeRequestStatus.COMPLETED;
+        await this.changeRequestRepository.save(leave);
+
+        processedCount++;
       }
     }
 
-    event.attendees = attendees;
-    await this.eventRepository.save(event);
+    return {
+      processedLeaves: processedCount,
+      cancelledRegistrations: cancelledRegistrationsCount,
+    };
   }
 }

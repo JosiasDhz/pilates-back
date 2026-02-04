@@ -8,8 +8,10 @@ import {
   Query,
   UseInterceptors,
   UploadedFile,
+  Res,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
@@ -34,8 +36,29 @@ export class PaymentsController {
 
   @Get('my-payments')
   @Auth()
-  getMyPayments(@GetUser() user: User) {
-    return this.paymentsService.findByUserId(user.id);
+  getMyPayments(@GetUser() user: User, @Query() paginationDto: PaginatePaymentDto) {
+    return this.paymentsService.findByUserId(user.id, paginationDto);
+  }
+
+  @Get('aspirant/:aspirantId/latest')
+  getLatestPaymentByAspirant(@Param('aspirantId') aspirantId: string) {
+    return this.paymentsService.getLatestPaymentByAspirantId(aspirantId);
+  }
+
+  @Get(':id/ticket')
+  async getTicket(
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const pdfBuffer = await this.paymentsService.generateTicket(id);
+    
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="ticket-${id}.pdf"`,
+      'Content-Length': pdfBuffer.length.toString(),
+    });
+
+    res.send(pdfBuffer);
   }
 
   @Get(':id')
@@ -49,11 +72,6 @@ export class PaymentsController {
     @Body() updatePaymentDto: UpdatePaymentDto,
   ) {
     return this.paymentsService.update(id, updatePaymentDto);
-  }
-
-  @Get('aspirant/:aspirantId/latest')
-  getLatestPaymentByAspirant(@Param('aspirantId') aspirantId: string) {
-    return this.paymentsService.getLatestPaymentByAspirantId(aspirantId);
   }
 
   @Patch('aspirant/:aspirantId/status')

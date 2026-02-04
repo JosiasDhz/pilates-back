@@ -40,6 +40,10 @@ export class CreateAspirantPhysicalRecordDto {
 
   @IsString()
   @IsOptional()
+  complexion?: string; // complexión
+
+  @IsString()
+  @IsOptional()
   rangeOfMotion?: string; // rango de movimiento
 
   @IsString()
