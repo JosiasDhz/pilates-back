@@ -10,14 +10,14 @@ export const getTypeOrmConfig = (): TypeOrmModuleOptions => {
     password: process.env.DB_PASSWORD,
     autoLoadEntities: true,
     synchronize: true,
-    // ...(process.env.NODE_ENV !== 'development' && {
-    //   ssl: true,
-    //   extra: {
-    //     ssl: {
-    //       rejectUnauthorized: false,
-    //     },
-    //   },
-    // }),
+    ...(process.env.NODE_ENV !== 'development' && {
+      ssl: true,
+      extra: {
+        ssl: {
+          rejectUnauthorized: false,
+        },
+      },
+    }),
     dropSchema: process.env.DB_DROP_SCHEMA === 'false' ? false : true,
   };
 };
