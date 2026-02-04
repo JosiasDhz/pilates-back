@@ -52,7 +52,13 @@ export class StudentClassRegistration {
   @Column({ type: 'varchar', length: 1, nullable: false })
   paymentModality: PaymentModality;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: false })
+  @Column({
+    name: 'calculated_cost',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: false,
+  })
   calculatedCost: number;
 
   @Column({ type: 'varchar', length: 3, default: 'MXN' })
