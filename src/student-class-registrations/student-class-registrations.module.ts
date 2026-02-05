@@ -7,6 +7,7 @@ import { Student } from 'src/students/entities/student.entity';
 import { Event } from 'src/calendar/entities/event.entity';
 import { Studio } from 'src/studios/entities/studio.entity';
 import { AuthModule } from 'src/auth/auth.module';
+import { TravelFeeBalanceModule } from 'src/travel-fee-balance/travel-fee-balance.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AuthModule } from 'src/auth/auth.module';
       Studio,
     ]),
     AuthModule,
+    TravelFeeBalanceModule,
   ],
   controllers: [StudentClassRegistrationsController],
   providers: [StudentClassRegistrationsService],

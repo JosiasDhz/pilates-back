@@ -8,5 +8,5 @@ export class CreateAspirantAccessTokenDto {
   @IsInt()
   @Min(1)
   @Max(90)
-  expiresInDays?: number; // Por defecto 30 días
+  expiresInDays?: number;
 }

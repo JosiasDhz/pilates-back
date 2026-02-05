@@ -195,6 +195,13 @@ Tarjeta: 4658 2859 1519 4371
 CLABE: 036610500540203218`,
         status: true,
       },
+      {
+        name: 'Tarifa de Viaje',
+        type: 'AUTOMATED' as const,
+        requiresEvidence: false,
+        instructions: 'Pago automático usando clases disponibles de tarifa de viaje.',
+        status: true,
+      },
     ];
 
     for (const methodData of defaultPaymentMethods) {

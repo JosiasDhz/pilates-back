@@ -3,7 +3,7 @@ import { Transform } from 'class-transformer';
 
 export class CreatePaymentDto {
   @IsNumber()
-  @Min(1)
+  @Min(0)
   amountCents: number;
 
   @IsString()
@@ -50,5 +50,6 @@ export class CreatePaymentDto {
     month?: number;
     year?: number;
     hasMembership?: boolean;
+    classesCoveredByTravelFee?: number;
   };
 }

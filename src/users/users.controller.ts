@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Query,
+  ForbiddenException,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -66,12 +67,15 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @Auth(ValidRoles.admin)
+  @Auth(ValidRoles.admin, ValidRoles.estudiante)
   update(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
     @GetUser() user: User,
   ) {
+    if (user.rol.name === ValidRoles.estudiante && id !== user.id) {
+      throw new ForbiddenException('Solo puedes actualizar tu propio perfil');
+    }
     return this.usersService.update(id, updateUserDto, user);
   }
 

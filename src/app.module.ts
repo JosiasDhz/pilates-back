@@ -32,6 +32,7 @@ import { StudentsModule } from './students/students.module';
 import { StudentClassRegistrationsModule } from './student-class-registrations/student-class-registrations.module';
 import { ScheduleChangesModule } from './schedule-changes/schedule-changes.module';
 import { StudentAssessmentsModule } from './student-assessments/student-assessments.module';
+import { TravelFeeBalanceModule } from './travel-fee-balance/travel-fee-balance.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { StudentAssessmentsModule } from './student-assessments/student-assessme
     StudentClassRegistrationsModule,
     ScheduleChangesModule,
     StudentAssessmentsModule,
+    TravelFeeBalanceModule,
   ],
   controllers: [],
   providers: [AppService],

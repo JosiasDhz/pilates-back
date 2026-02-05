@@ -7,6 +7,7 @@ import { StudentStatusHistory } from './entities/student-status-history.entity';
 import { AuthModule } from 'src/auth/auth.module';
 import { CalendarModule } from 'src/calendar/calendar.module';
 import { StudentClassRegistrationsModule } from 'src/student-class-registrations/student-class-registrations.module';
+import { TravelFeeBalanceModule } from 'src/travel-fee-balance/travel-fee-balance.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { StudentClassRegistrationsModule } from 'src/student-class-registrations
     AuthModule,
     CalendarModule,
     forwardRef(() => StudentClassRegistrationsModule),
+    TravelFeeBalanceModule,
   ],
   controllers: [StudentsController],
   providers: [StudentsService],

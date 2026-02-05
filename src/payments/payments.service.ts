@@ -36,11 +36,8 @@ export class PaymentsService {
     @InjectRepository(Student)
     private readonly studentRepository: Repository<Student>,
     private readonly filesService: FilesService,
-  ) {}
+  ) { }
 
-  /**
-   * Genera un código de referencia alfanumérico de 8 caracteres
-   */
   private generateReferenceCode(): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
@@ -50,16 +47,13 @@ export class PaymentsService {
     return result;
   }
 
-  /**
-   * Crea un pago manual con código de referencia único
-   */
   async createManualPayment(createPaymentDto: CreatePaymentDto): Promise<Payment> {
-    // Normalizar userId, aspirantId y studentId (eliminar strings vacíos)
+
     let userId = createPaymentDto.userId?.trim() || null;
     const aspirantId = createPaymentDto.aspirantId?.trim() || null;
     const studentId = createPaymentDto.studentId?.trim() || null;
 
-    // Si se proporciona studentId, obtener el userId correspondiente
+
     if (studentId) {
       const student = await this.studentRepository.findOne({
         where: { id: studentId },
@@ -71,12 +65,12 @@ export class PaymentsService {
       userId = student.userId;
     }
 
-    // Verificar que al menos uno de userId o aspirantId esté presente
+
     if (!userId && !aspirantId) {
       throw new BadRequestException('Debe proporcionarse userId, studentId o aspirantId');
     }
 
-    // Verificar que el usuario existe si se proporciona userId
+
     let user: User | null = null;
     if (userId) {
       user = await this.userRepository.findOne({
@@ -87,7 +81,7 @@ export class PaymentsService {
       }
     }
 
-    // Verificar que el aspirante existe si se proporciona aspirantId
+
     if (aspirantId) {
       const aspirant = await this.aspirantRepository.findOne({
         where: { id: aspirantId },
@@ -97,7 +91,7 @@ export class PaymentsService {
       }
     }
 
-    // Verificar que el método de pago existe
+
     const paymentMethod = await this.paymentMethodRepository.findOne({
       where: { id: createPaymentDto.paymentMethodId },
     });
@@ -105,7 +99,7 @@ export class PaymentsService {
       throw new NotFoundException('Método de pago no encontrado');
     }
 
-    // Generar código de referencia único
+
     let referenceCode: string;
     let isUnique = false;
     let attempts = 0;
@@ -128,15 +122,16 @@ export class PaymentsService {
       );
     }
 
-    // Asegurar que amountCents esté en centavos
-    // Si el valor es menor a 1000, asumimos que viene en pesos y lo convertimos a centavos
+
+
+
     let amountCents = createPaymentDto.amountCents;
-    if (amountCents < 1000) {
-      // Probablemente viene en pesos, convertir a centavos
+    if (amountCents > 0 && amountCents < 1000) {
+
       amountCents = amountCents * 100;
     }
 
-    // Crear el pago
+
     const payment = this.paymentRepository.create({
       amountCents: BigInt(amountCents),
       currency: createPaymentDto.currency || 'MXN',
@@ -149,7 +144,7 @@ export class PaymentsService {
     });
 
     const saved = await this.paymentRepository.save(payment);
-    // Devolver con amountCents como string para serialización JSON
+
     return {
       ...saved,
       amountCents: saved.amountCents.toString(),
@@ -174,7 +169,7 @@ export class PaymentsService {
       bufferLength: file.buffer?.length,
     } : 'NO HAY ARCHIVO');
 
-    // Verificar que el pago existe (SIN cargar relaciones para evitar problemas de sincronización)
+
     const payment = await this.paymentRepository.findOne({
       where: { id: paymentId },
     });
@@ -190,7 +185,7 @@ export class PaymentsService {
       amountCents: payment.amountCents.toString(),
     });
 
-    // Verificar que el pago está en estado PENDING
+
     if (payment.status !== PaymentStatus.PENDING) {
       console.error('❌ Pago no está en estado PENDING:', payment.status);
       throw new BadRequestException(
@@ -198,30 +193,30 @@ export class PaymentsService {
       );
     }
 
-    // Verificar que el archivo tiene buffer
+
     if (!file.buffer) {
       console.error('❌ Archivo no tiene buffer');
       throw new BadRequestException('El archivo no tiene contenido (buffer)');
     }
 
     console.log('Subiendo archivo a S3...');
-    // Subir el archivo usando FilesService
+
     const uploadedFile = await this.filesService.uploadFile(file);
     console.log('✅ Archivo subido a S3:', uploadedFile.id);
 
-    // Crear el registro de evidencia usando insert directo para evitar problemas de sincronización
+
     console.log('Guardando evidencia en BD...');
     const insertResult = await this.paymentEvidenceRepository.insert({
       paymentId: payment.id,
       fileId: uploadedFile.id,
       uploadedAt: new Date(),
     });
-    
+
     const savedEvidenceId = insertResult.identifiers[0].id;
     console.log('✅ Evidencia guardada:', savedEvidenceId);
 
-    // Cambiar el estado del pago a UNDER_REVIEW usando update directo para evitar sincronización
-    // Usar try-catch para que si hay error aquí, aún retornemos la evidencia guardada
+
+
     try {
       await this.paymentRepository.update(
         { id: payment.id },
@@ -230,12 +225,12 @@ export class PaymentsService {
       console.log('✅ Estado del pago actualizado a UNDER_REVIEW');
     } catch (updateError) {
       console.error('⚠️ Error al actualizar estado del pago (pero evidencia ya guardada):', updateError);
-      // Continuar aunque haya error, la evidencia ya está guardada
+
     }
-    
+
     console.log('======================');
 
-    // Retornar la evidencia buscándola sin relaciones para evitar problemas
+
     const savedEvidence = await this.paymentEvidenceRepository.findOne({
       where: { id: savedEvidenceId },
     });
@@ -247,9 +242,6 @@ export class PaymentsService {
     return savedEvidence;
   }
 
-  /**
-   * Encuentra un pago por ID con todas sus relaciones
-   */
   async findOne(id: string): Promise<Payment> {
     const payment = await this.paymentRepository.findOne({
       where: { id },
@@ -260,16 +252,13 @@ export class PaymentsService {
       throw new NotFoundException('Pago no encontrado');
     }
 
-    // Transformar bigint a string para serialización JSON
+
     return {
       ...payment,
       amountCents: payment.amountCents.toString(),
     } as any;
   }
 
-  /**
-   * Encuentra todos los pagos con paginación
-   */
   async findAll(paginationDto?: any) {
     const {
       limit = 10,
@@ -296,7 +285,7 @@ export class PaymentsService {
       );
     }
 
-    // Mapeo de campos de ordenamiento
+
     const sortMapping: Record<string, string> = {
       nombre: 'user.name',
       name: 'user.name',
@@ -317,7 +306,7 @@ export class PaymentsService {
 
     const [records, total] = await query.getManyAndCount();
 
-    // Transformar bigint a string para serialización JSON
+
     const transformedRecords = records.map((payment) => ({
       ...payment,
       amountCents: payment.amountCents.toString(),
@@ -329,9 +318,6 @@ export class PaymentsService {
     };
   }
 
-  /**
-   * Encuentra todos los pagos del usuario autenticado (estudiante) con paginación
-   */
   async findByUserId(userId: string, paginationDto?: any): Promise<any> {
     const {
       limit = 10,
@@ -359,7 +345,7 @@ export class PaymentsService {
       );
     }
 
-    // Mapeo de campos de ordenamiento
+
     const sortMapping: Record<string, string> = {
       fecha: 'payment.createdAt',
       createdAt: 'payment.createdAt',
@@ -377,7 +363,7 @@ export class PaymentsService {
 
     const [records, total] = await query.getManyAndCount();
 
-    // Transformar bigint a string para serialización JSON
+
     const transformedRecords = records.map((payment) => ({
       ...payment,
       amountCents: payment.amountCents.toString(),
@@ -389,9 +375,6 @@ export class PaymentsService {
     };
   }
 
-  /**
-   * Encuentra todos los pagos de un aspirante
-   */
   async findByAspirantId(aspirantId: string): Promise<Payment[]> {
     return await this.paymentRepository.find({
       where: { aspirantId },
@@ -400,14 +383,11 @@ export class PaymentsService {
     });
   }
 
-  /**
-   * Agrega evidencia a un pago usando un fileId existente
-   */
   async addEvidenceToPayment(
     paymentId: string,
     fileId: string,
   ): Promise<PaymentEvidence> {
-    // No cargar relaciones para evitar problemas con cascade
+
     const payment = await this.paymentRepository.findOne({
       where: { id: paymentId },
     });
@@ -422,14 +402,14 @@ export class PaymentsService {
       );
     }
 
-    // Crear el registro de evidencia usando insert directo
+
     const insertResult = await this.paymentEvidenceRepository.insert({
       paymentId: payment.id,
       fileId,
       uploadedAt: new Date(),
     });
 
-    // Obtener la evidencia creada
+
     const savedEvidence = await this.paymentEvidenceRepository.findOne({
       where: { id: insertResult.identifiers[0].id },
       relations: ['payment', 'file'],
@@ -439,8 +419,8 @@ export class PaymentsService {
       throw new Error('Error al crear la evidencia de pago');
     }
 
-    // Cambiar el estado del pago a UNDER_REVIEW usando update directo
-    // Esto evita que TypeORM procese las relaciones con cascade
+
+
     await this.paymentRepository.update(
       { id: paymentId },
       { status: PaymentStatus.UNDER_REVIEW },
@@ -449,9 +429,6 @@ export class PaymentsService {
     return savedEvidence;
   }
 
-  /**
-   * Actualiza un pago (principalmente el status)
-   */
   async update(id: string, updatePaymentDto: UpdatePaymentDto): Promise<Payment> {
     const payment = await this.paymentRepository.findOne({
       where: { id },
@@ -461,16 +438,16 @@ export class PaymentsService {
       throw new NotFoundException('Pago no encontrado');
     }
 
-    // Actualizar el status si se proporciona
+
     if (updatePaymentDto.status !== undefined) {
       payment.status = updatePaymentDto.status;
-      
-      // Si el status cambia a COMPLETED, establecer verifiedAt
+
+
       if (updatePaymentDto.status === PaymentStatus.COMPLETED && !payment.verifiedAt) {
         payment.verifiedAt = new Date();
       }
-      
-      // Si el status cambia de COMPLETED a otro, limpiar verifiedAt
+
+
       if (updatePaymentDto.status !== PaymentStatus.COMPLETED && payment.verifiedAt) {
         payment.verifiedAt = null;
       }
@@ -478,16 +455,13 @@ export class PaymentsService {
 
     const updatedPayment = await this.paymentRepository.save(payment);
 
-    // Transformar bigint a string para serialización JSON
+
     return {
       ...updatedPayment,
       amountCents: updatedPayment.amountCents.toString(),
     } as any;
   }
 
-  /**
-   * Actualiza el status del pago más reciente de un aspirante
-   */
   async getLatestPaymentByAspirantId(aspirantId: string): Promise<Payment | null> {
     const payment = await this.paymentRepository.findOne({
       where: { aspirantId },
@@ -499,7 +473,7 @@ export class PaymentsService {
       return null;
     }
 
-    // Transformar bigint a string para serialización JSON
+
     return {
       ...payment,
       amountCents: payment.amountCents.toString(),
@@ -510,7 +484,7 @@ export class PaymentsService {
     aspirantId: string,
     updatePaymentDto: UpdatePaymentDto,
   ): Promise<Payment> {
-    // Buscar el pago más reciente del aspirante
+
     const payment = await this.paymentRepository.findOne({
       where: { aspirantId },
       order: { createdAt: 'DESC' },
@@ -520,16 +494,16 @@ export class PaymentsService {
       throw new NotFoundException('No se encontró ningún pago para este aspirante');
     }
 
-    // Actualizar el status si se proporciona
+
     if (updatePaymentDto.status !== undefined) {
       payment.status = updatePaymentDto.status;
-      
-      // Si el status cambia a COMPLETED, establecer verifiedAt
+
+
       if (updatePaymentDto.status === PaymentStatus.COMPLETED && !payment.verifiedAt) {
         payment.verifiedAt = new Date();
       }
-      
-      // Si el status cambia de COMPLETED a otro, limpiar verifiedAt
+
+
       if (updatePaymentDto.status !== PaymentStatus.COMPLETED && payment.verifiedAt) {
         payment.verifiedAt = null;
       }
@@ -537,21 +511,18 @@ export class PaymentsService {
 
     const updatedPayment = await this.paymentRepository.save(payment);
 
-    // Transformar bigint a string para serialización JSON
+
     return {
       ...updatedPayment,
       amountCents: updatedPayment.amountCents.toString(),
     } as any;
   }
 
-  /**
-   * Genera un ticket PDF para un pago
-   */
   async generateTicket(paymentId: string): Promise<Buffer> {
-    // Obtener el pago con todas sus relaciones
+
     const payment = await this.findOne(paymentId);
 
-    // Obtener información del cliente
+
     let clientName = '';
     let clientEmail = '';
     let clientPhone = '';
@@ -568,24 +539,24 @@ export class PaymentsService {
       clientPhone = aspirant.phone || '';
     }
 
-    // Información del negocio (puedes mover esto a variables de entorno)
+
     const businessName = process.env.BUSINESS_NAME || 'Pilates Studio';
     const businessSubtitle = process.env.BUSINESS_SUBTITLE || 'Sistema de gestión';
 
-    // Convertir amountCents a número
-    const amountCents = typeof payment.amountCents === 'string' 
-      ? parseInt(payment.amountCents, 10) 
+
+    const amountCents = typeof payment.amountCents === 'string'
+      ? parseInt(payment.amountCents, 10)
       : Number(payment.amountCents);
     const amount = amountCents / 100;
 
-    // Formatear fechas
+
     const createdAt = format(new Date(payment.createdAt), "d 'de' MMMM 'de' yyyy 'a las' HH:mm", { locale: es });
-    const verifiedAt = payment.verifiedAt 
+    const verifiedAt = payment.verifiedAt
       ? format(new Date(payment.verifiedAt), "d 'de' MMMM 'de' yyyy 'a las' HH:mm", { locale: es })
       : null;
     const ticketGeneratedAt = format(new Date(), "d 'de' MMMM 'de' yyyy 'a las' HH:mm", { locale: es });
 
-    // Mapear estado
+
     const statusMap: Record<PaymentStatus, string> = {
       PENDING: 'Pendiente',
       UNDER_REVIEW: 'En revisión',
@@ -593,10 +564,10 @@ export class PaymentsService {
       REJECTED: 'Rechazado',
     };
 
-    // Procesar datos de clases seleccionadas
+
     const classSelectionData = payment.classSelectionData;
     let classDaysInfo: Array<{ dayName: string; time: string; dates: string }> = [];
-    
+
     if (classSelectionData?.selectedDayTimePairs && classSelectionData.month && classSelectionData.year) {
       const monthStart = startOfMonth(new Date(classSelectionData.year, classSelectionData.month - 1, 1));
       const monthEnd = endOfMonth(monthStart);
@@ -607,8 +578,8 @@ export class PaymentsService {
       };
 
       const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-      
-      // Agrupar por día y hora
+
+
       const grouped = classSelectionData.selectedDayTimePairs.reduce((acc, pair) => {
         const key = `${pair.dayOfWeek}-${pair.time}`;
         if (!acc[key]) {
@@ -626,7 +597,7 @@ export class PaymentsService {
         const days = group.dates.map(date => format(date, "d", { locale: es }));
         const month = format(group.dates[0], "'de' MMMM", { locale: es });
         let datesStr = '';
-        
+
         if (days.length === 1) {
           datesStr = `${days[0]} ${month}`;
         } else if (days.length === 2) {
@@ -645,8 +616,8 @@ export class PaymentsService {
       });
     }
 
-    // Crear documento PDF (80mm x 297mm - tamaño ticket estándar)
-    // Convertir mm a puntos: 1mm = 2.83465 puntos
+
+
     const widthMM = 80;
     const heightMM = 297;
     const widthPT = widthMM * 2.83465;
@@ -674,23 +645,23 @@ export class PaymentsService {
 
       let yPosition = 15;
 
-      // Encabezado
+
       doc.fontSize(13).font('Helvetica-Bold').fillColor('#1a1a1a').text('TICKET DE PAGO', { align: 'center' });
       yPosition += 16;
 
-      // Información del negocio
+
       doc.fontSize(8).font('Helvetica').fillColor('#333333').text(businessName, { align: 'center' });
       yPosition += 10;
       doc.fontSize(6).fillColor('#666666').text(businessSubtitle, { align: 'center' });
       yPosition += 15;
 
-      // Línea divisoria mejorada
+
       doc.strokeColor('#cccccc').lineWidth(0.5);
       doc.moveTo(15, yPosition).lineTo(widthPT - 15, yPosition).stroke();
       doc.strokeColor('#000000').lineWidth(1);
       yPosition += 15;
 
-      // Información del cliente
+
       doc.fontSize(9).font('Helvetica-Bold').fillColor('#1a1a1a').text('CLIENTE', 15, yPosition);
       yPosition += 12;
       doc.fontSize(8).font('Helvetica').fillColor('#333333').text(clientName || 'N/A', 15, yPosition);
@@ -700,13 +671,13 @@ export class PaymentsService {
       doc.text(`Tel: ${clientPhone || 'N/A'}`, 15, yPosition);
       yPosition += 15;
 
-      // Línea divisoria
+
       doc.strokeColor('#cccccc').lineWidth(0.5);
       doc.moveTo(15, yPosition).lineTo(widthPT - 15, yPosition).stroke();
       doc.strokeColor('#000000').lineWidth(1);
       yPosition += 15;
 
-      // Información del pago
+
       doc.fontSize(9).font('Helvetica-Bold').fillColor('#1a1a1a').text('INFORMACIÓN DEL PAGO', { align: 'center' });
       yPosition += 12;
 
@@ -728,7 +699,7 @@ export class PaymentsService {
         yPosition += 10;
       }
 
-      // Mostrar días comprados si están disponibles
+
       if (classDaysInfo.length > 0) {
         yPosition += 8;
         doc.strokeColor('#cccccc').lineWidth(0.5);
@@ -741,7 +712,7 @@ export class PaymentsService {
 
         doc.fontSize(7).font('Helvetica').fillColor('#333333');
         classDaysInfo.forEach((info, index) => {
-          // Verificar si hay espacio suficiente antes de agregar contenido
+
           if (yPosition > heightPT - 80) {
             doc.addPage();
             yPosition = 15;
@@ -756,21 +727,21 @@ export class PaymentsService {
 
       yPosition += 8;
 
-      // Línea divisoria
+
       doc.strokeColor('#cccccc').lineWidth(0.5);
       doc.moveTo(15, yPosition).lineTo(widthPT - 15, yPosition).stroke();
       doc.strokeColor('#000000').lineWidth(1);
       yPosition += 12;
 
-      // Pie de página mejorado - verificar espacio antes de escribir
+
       if (yPosition < heightPT - 40) {
         doc.fontSize(7).font('Helvetica').fillColor('#333333').text('Gracias por su pago', { align: 'center' });
         yPosition += 9;
         doc.fontSize(6).fillColor('#666666').text('Conserve este ticket como comprobante', { align: 'center' });
         yPosition += 10;
       }
-      
-      // Ticket generado siempre al final si hay espacio
+
+
       if (yPosition < heightPT - 15) {
         doc.fontSize(5).fillColor('#999999').text(`Ticket generado: ${ticketGeneratedAt}`, { align: 'center' });
       }

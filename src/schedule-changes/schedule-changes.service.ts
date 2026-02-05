@@ -21,9 +21,13 @@ import { Student } from 'src/students/entities/student.entity';
 import { Event } from 'src/calendar/entities/event.entity';
 import { StudentClassRegistration, RegistrationStatus } from 'src/student-class-registrations/entities/student-class-registration.entity';
 import { Studio } from 'src/studios/entities/studio.entity';
+import { TravelFeeBalanceService } from 'src/travel-fee-balance/travel-fee-balance.service';
 
 @Injectable()
 export class ScheduleChangesService {
+
+
+  private readonly AUTO_APPROVE_TRAVEL_FEES = true;
   constructor(
     @InjectRepository(ScheduleChangeRequest)
     private readonly changeRequestRepository: Repository<ScheduleChangeRequest>,
@@ -40,11 +44,9 @@ export class ScheduleChangesService {
     @InjectRepository(Studio)
     private readonly studioRepository: Repository<Studio>,
     private readonly dataSource: DataSource,
-  ) {}
+    private readonly travelFeeBalanceService: TravelFeeBalanceService,
+  ) { }
 
-  /**
-   * Calcula el número de comodines según las clases por semana
-   */
   calculateJokers(classesPerWeek: number): number {
     if (classesPerWeek <= 2) return 1;
     if (classesPerWeek === 3) return 2;
@@ -53,9 +55,6 @@ export class ScheduleChangesService {
     return 0;
   }
 
-  /**
-   * Obtiene o crea el registro de comodines para un estudiante en un mes específico
-   */
   async getOrCreateJokers(
     studentId: string,
     year: number,
@@ -67,7 +66,7 @@ export class ScheduleChangesService {
     });
 
     if (!jokers) {
-      // Si no existe, calcular según las clases registradas del mes
+
       if (classesPerWeek === undefined) {
         classesPerWeek = await this.calculateClassesPerWeek(studentId, year, month);
       }
@@ -89,9 +88,6 @@ export class ScheduleChangesService {
     return jokers;
   }
 
-  /**
-   * Calcula las clases por semana basándose en los registros del mes
-   */
   private async calculateClassesPerWeek(
     studentId: string,
     year: number,
@@ -108,7 +104,7 @@ export class ScheduleChangesService {
       relations: ['event'],
     });
 
-    // Filtrar registros del mes
+
     const monthRegistrations = registrations.filter((reg) => {
       const eventDate = new Date(reg.event.date);
       return eventDate >= startDate && eventDate <= endDate;
@@ -116,7 +112,7 @@ export class ScheduleChangesService {
 
     if (monthRegistrations.length === 0) return 0;
 
-    // Agrupar por semana
+
     const weeks = new Set<number>();
     monthRegistrations.forEach((reg) => {
       const eventDate = new Date(reg.event.date);
@@ -124,14 +120,11 @@ export class ScheduleChangesService {
       weeks.add(week);
     });
 
-    // Promedio de clases por semana
+
     const totalWeeks = weeks.size || 1;
     return Math.ceil(monthRegistrations.length / totalWeeks);
   }
 
-  /**
-   * Obtiene la semana del mes (1-4 o 1-5)
-   */
   private getWeekOfMonth(date: Date): number {
     const start = new Date(date.getFullYear(), date.getMonth(), 1);
     const dayOfWeek = start.getDay();
@@ -139,9 +132,6 @@ export class ScheduleChangesService {
     return Math.ceil((dayOfMonth + dayOfWeek) / 7);
   }
 
-  /**
-   * Verifica si puede reagendar (24 horas de anticipación o comodín disponible)
-   */
   async canReschedule(
     studentId: string,
     originalEventId: string,
@@ -160,13 +150,13 @@ export class ScheduleChangesService {
     const now = new Date();
     const hoursUntilEvent = (eventDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
 
-    // Si es más de 24 horas, puede reagendar sin comodín
+
     if (hoursUntilEvent >= 24) {
       return { canReschedule: true, requiresJoker: false };
     }
 
-    // Si es menos de 24 horas, necesita comodín
-    // Verificar comodines disponibles
+
+
     const year = eventDate.getFullYear();
     const month = eventDate.getMonth() + 1;
 
@@ -183,13 +173,8 @@ export class ScheduleChangesService {
     };
   }
 
-  /**
-   * Crea una solicitud de cambio de horario
-   */
   async createChangeRequest(createDto: CreateScheduleChangeRequestDto) {
-    console.log('=== CREATE CHANGE REQUEST ===');
-    console.log('DTO recibido:', JSON.stringify(createDto, null, 2));
-    
+
     const student = await this.studentRepository.findOne({
       where: { id: createDto.studentId },
     });
@@ -197,8 +182,8 @@ export class ScheduleChangesService {
       throw new NotFoundException('Estudiante no encontrado');
     }
 
-    // Para baja temporal, no necesitamos validar evento original específico
-    // Solo necesitamos que el estudiante exista y tenga una fecha de inicio
+
+
     if (createDto.requestType === ChangeRequestType.TEMPORARY_LEAVE) {
       if (!createDto.leaveStartDate) {
         throw new BadRequestException(
@@ -206,7 +191,7 @@ export class ScheduleChangesService {
         );
       }
 
-      // Buscar cualquier registro del estudiante para usar como referencia
+
       const anyRegistration = await this.registrationRepository.findOne({
         where: {
           studentId: createDto.studentId,
@@ -220,7 +205,7 @@ export class ScheduleChangesService {
         );
       }
 
-      // Usar el evento de cualquier registro como referencia
+
       const originalEvent = await this.eventRepository.findOne({
         where: { id: anyRegistration.eventId },
         relations: ['studio'],
@@ -230,7 +215,7 @@ export class ScheduleChangesService {
         throw new NotFoundException('No se pudo encontrar un evento de referencia');
       }
 
-      // Crear la solicitud con el evento de referencia
+
       const leaveStartDate = new Date(createDto.leaveStartDate);
       leaveStartDate.setHours(0, 0, 0, 0);
 
@@ -248,7 +233,7 @@ export class ScheduleChangesService {
       return await this.changeRequestRepository.save(changeRequest);
     }
 
-    // Para otros tipos de solicitud, validar evento original
+
     const originalEvent = await this.eventRepository.findOne({
       where: { id: createDto.originalEventId },
       relations: ['studio'],
@@ -257,7 +242,7 @@ export class ScheduleChangesService {
       throw new NotFoundException('Evento original no encontrado');
     }
 
-    // Verificar que el estudiante esté registrado en el evento original
+
     const registration = await this.registrationRepository.findOne({
       where: {
         studentId: createDto.studentId,
@@ -276,22 +261,15 @@ export class ScheduleChangesService {
     let usesJoker = createDto.usesJoker || false;
     let requires24Hours = true;
 
-    // Si es reagendar, validar disponibilidad y comodines
-    console.log('RequestType recibido:', createDto.requestType, 'Tipo:', typeof createDto.requestType);
-    console.log('ChangeRequestType.RESCHEDULE:', ChangeRequestType.RESCHEDULE);
-    
-    // Usar type assertion para evitar problemas de inferencia de tipos
+
+
+
     const requestTypeStr = String(createDto.requestType).toLowerCase();
-    const isReschedule = createDto.requestType === ChangeRequestType.RESCHEDULE || 
-                         requestTypeStr === 'reschedule';
-    
-    console.log('isReschedule calculado:', isReschedule);
-    
+    const isReschedule = createDto.requestType === ChangeRequestType.RESCHEDULE ||
+      requestTypeStr === 'reschedule';
+
+
     if (isReschedule) {
-      console.log('=== INICIO REAGENDAMIENTO ===');
-      console.log('RequestType:', createDto.requestType);
-      console.log('NewEventId:', createDto.newEventId);
-      
       if (!createDto.newEventId) {
         throw new BadRequestException(
           'Se requiere un nuevo evento para reagendar',
@@ -306,9 +284,8 @@ export class ScheduleChangesService {
         throw new NotFoundException('Nuevo evento no encontrado');
       }
 
-      console.log('Nuevo evento encontrado:', newEvent.id, 'Fecha:', newEvent.date);
 
-      // Verificar que sea del mismo mes
+
       const originalDate = new Date(originalEvent.date);
       const newDate = new Date(newEvent.date);
       if (
@@ -320,21 +297,20 @@ export class ScheduleChangesService {
         );
       }
 
-      // TODOS los reagendamientos van a lista de espera
-      // Crear entrada en lista de espera automáticamente
-      console.log('Intentando crear lista de espera...');
+
+
       try {
-        // Manejar la fecha correctamente (puede ser Date o string desde la BD)
+
         let requestedDateStr: string;
         const eventDateValue: Date | string = newEvent.date as Date | string;
-        
+
         if (eventDateValue instanceof Date) {
           requestedDateStr = eventDateValue.toISOString().split('T')[0];
         } else if (typeof eventDateValue === 'string') {
-          // Si es string, puede venir en formato ISO o YYYY-MM-DD
+
           requestedDateStr = eventDateValue.split('T')[0];
         } else {
-          // Fallback: convertir a Date y luego a string
+
           const eventDate = new Date(eventDateValue as any);
           if (isNaN(eventDate.getTime())) {
             throw new Error(`Fecha inválida: ${String(eventDateValue)}`);
@@ -342,12 +318,6 @@ export class ScheduleChangesService {
           requestedDateStr = eventDate.toISOString().split('T')[0];
         }
 
-        console.log('Creando lista de espera para reagendamiento:', {
-          studentId: createDto.studentId,
-          eventId: createDto.newEventId,
-          requestedDate: requestedDateStr,
-          reason: createDto.reason || `Solicitud de reagendar desde ${originalEvent.title}`,
-        });
 
         const waitlistEntry = await this.createWaitlist({
           studentId: createDto.studentId,
@@ -356,57 +326,99 @@ export class ScheduleChangesService {
           notes: createDto.reason || `Solicitud de reagendar desde ${originalEvent.title}`,
         });
 
-        console.log('✅ Lista de espera creada exitosamente:', waitlistEntry.id);
       } catch (waitlistError: any) {
-        // Si ya existe en lista de espera, continuar con la creación de la solicitud
+
         if (waitlistError instanceof ConflictException) {
-          // Ya está en lista de espera, continuar
-          console.log('⚠️ Ya existe en lista de espera para este evento, continuando...');
+
         } else {
-          // Log del error pero continuar con la creación de la solicitud
-          console.error('❌ Error al crear lista de espera:', waitlistError);
-          console.error('Error message:', waitlistError?.message);
-          console.error('Error stack:', waitlistError?.stack);
-          // No lanzar el error para que la solicitud se cree de todas formas
+          console.error('Error al crear lista de espera:', waitlistError);
+
         }
       }
 
-      // Verificar disponibilidad solo para información (no bloquea)
+
       const isAvailable = await this.checkAvailability(newEvent);
-      console.log('Disponibilidad del nuevo evento:', isAvailable);
-      
-      // Verificar si puede reagendar (para comodines y 24 horas)
+
+
       const canReschedule = await this.canReschedule(
         createDto.studentId,
         createDto.originalEventId,
         createDto.newEventId,
       );
 
-      console.log('CanReschedule:', canReschedule);
 
-      // Si no puede reagendar (sin comodines y menos de 24 horas), aún así permitirlo
-      // porque irá a lista de espera y el admin decidirá
+
+
       usesJoker = canReschedule.requiresJoker;
       requires24Hours = !usesJoker;
-      
-      console.log('=== FIN REAGENDAMIENTO ===');
+
     }
 
-    // Si es tarifa de viaje, calcular el 50% del costo
+
     let travelFeeAmount = createDto.travelFeeAmount;
+    let travelFeeClasses: number | null = null;
+
     if (createDto.requestType === ChangeRequestType.TRAVEL_FEE) {
-      if (!travelFeeAmount) {
-        travelFeeAmount = Number(registration.calculatedCost) * 0.5;
+
+      let numberOfClasses = 0;
+
+      if (createDto.travelFeeDates && createDto.travelFeeDates.length > 0) {
+
+        const allRegistrations = await this.registrationRepository.find({
+          where: {
+            studentId: createDto.studentId,
+            status: In([RegistrationStatus.PENDING, RegistrationStatus.CONFIRMED]),
+          },
+          relations: ['event'],
+        });
+
+
+        for (const dateStr of createDto.travelFeeDates) {
+          const targetDate = new Date(dateStr);
+          targetDate.setHours(0, 0, 0, 0);
+
+          const matchingRegistrations = allRegistrations.filter((reg) => {
+            if (!reg.event?.date) return false;
+            const eventDate = new Date(reg.event.date);
+            eventDate.setHours(0, 0, 0, 0);
+            return eventDate.getTime() === targetDate.getTime();
+          });
+
+          numberOfClasses += matchingRegistrations.length;
+        }
+      } else {
+
+        numberOfClasses = 1;
       }
+
+
+
+      travelFeeClasses = numberOfClasses * 0.5;
+
+      if (!travelFeeAmount) {
+
+        const pricePerClass = Number(registration.calculatedCost) * 0.5;
+
+
+        travelFeeAmount = pricePerClass * numberOfClasses;
+      }
+
+
     }
 
-    // Convertir leaveStartDate de string a Date si existe
+
     let leaveStartDate: Date | null = null;
     if (createDto.leaveStartDate) {
       leaveStartDate = new Date(createDto.leaveStartDate);
-      // Asegurar que sea solo la fecha (sin hora)
+
       leaveStartDate.setHours(0, 0, 0, 0);
     }
+
+
+    const initialStatus =
+      createDto.requestType === ChangeRequestType.TRAVEL_FEE && this.AUTO_APPROVE_TRAVEL_FEES
+        ? ChangeRequestStatus.APPROVED
+        : ChangeRequestStatus.PENDING;
 
     const changeRequest = this.changeRequestRepository.create({
       ...createDto,
@@ -416,10 +428,14 @@ export class ScheduleChangesService {
       travelFeeAmount,
       leaveStartDate,
       travelFeeDates: createDto.travelFeeDates ?? null,
-      status: ChangeRequestStatus.PENDING,
+      status: initialStatus,
+
+      approvedAt: initialStatus === ChangeRequestStatus.APPROVED ? new Date() : null,
+
+
     });
 
-    // Si usa comodín, consumirlo
+
     if (usesJoker && createDto.requestType === ChangeRequestType.RESCHEDULE) {
       const eventDate = new Date(originalEvent.date);
       const year = eventDate.getFullYear();
@@ -429,12 +445,34 @@ export class ScheduleChangesService {
       await this.jokersRepository.save(jokers);
     }
 
-    return await this.changeRequestRepository.save(changeRequest);
+    const savedRequest = await this.changeRequestRepository.save(changeRequest);
+
+
+    if (initialStatus === ChangeRequestStatus.APPROVED && createDto.requestType === ChangeRequestType.TRAVEL_FEE) {
+      try {
+
+
+
+
+        if (travelFeeClasses && travelFeeClasses > 0) {
+          const now = new Date();
+          const monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          await this.travelFeeBalanceService.addClasses(
+            createDto.studentId,
+            savedRequest.id,
+            travelFeeClasses,
+            monthYear,
+          );
+        }
+      } catch (error) {
+        console.error('Error al procesar aprobación automática de tarifa de viaje:', error);
+
+      }
+    }
+
+    return savedRequest;
   }
 
-  /**
-   * Aprobar una solicitud de cambio
-   */
   async approveChangeRequest(
     id: string,
     updateDto: UpdateScheduleChangeRequestDto,
@@ -458,7 +496,7 @@ export class ScheduleChangesService {
     await queryRunner.startTransaction();
 
     try {
-      // Actualizar el registro original
+
       const originalRegistration = await this.registrationRepository.findOne({
         where: {
           studentId: changeRequest.studentId,
@@ -472,18 +510,32 @@ export class ScheduleChangesService {
 
       switch (changeRequest.requestType) {
         case ChangeRequestType.TEMPORARY_LEAVE:
-          // Baja temporal: cancelar el registro
+
           originalRegistration.status = RegistrationStatus.CANCELLED;
           await queryRunner.manager.save(originalRegistration);
           break;
 
         case ChangeRequestType.TRAVEL_FEE:
-          // Tarifa de viaje: mantener el registro pero marcar como apartado
-          // El lugar se mantiene reservado
+
+
+
+          const travelFeeClassesToAdd = changeRequest.travelFeeAmount
+            ? Number(changeRequest.travelFeeAmount) / 250
+            : 0;
+          if (travelFeeClassesToAdd > 0) {
+            const approvedDate = new Date();
+            const monthYear = `${approvedDate.getFullYear()}-${String(approvedDate.getMonth() + 1).padStart(2, '0')}`;
+            await this.travelFeeBalanceService.addClasses(
+              changeRequest.studentId,
+              changeRequest.id,
+              travelFeeClassesToAdd,
+              monthYear,
+            );
+          }
           break;
 
         case ChangeRequestType.RESCHEDULE:
-          // Reagendar: solo actualizar la fecha de la inscripción (mismo registro, otro evento)
+
           if (!changeRequest.newEventId) {
             throw new BadRequestException('Se requiere un nuevo evento para reagendar');
           }
@@ -517,7 +569,7 @@ export class ScheduleChangesService {
           break;
       }
 
-      // Actualizar la solicitud
+
       changeRequest.status = ChangeRequestStatus.APPROVED;
       changeRequest.approvedAt = new Date();
       changeRequest.approvedById = approvedById;
@@ -540,11 +592,6 @@ export class ScheduleChangesService {
     }
   }
 
-  /**
-   * Reagendamiento inmediato: solo actualiza la fecha/clase de la inscripción existente.
-   * No crea ni elimina registros: cambia eventId de la misma inscripción y actualiza attendees.
-   * Solo mismo mes.
-   */
   async executeRescheduleImmediate(
     studentId: string,
     originalEventId: string,
@@ -628,9 +675,6 @@ export class ScheduleChangesService {
     };
   }
 
-  /**
-   * Reagendamiento inmediato en lote (varios pares). Un solo comodín por todo el reagendamiento.
-   */
   async executeRescheduleImmediateBulk(
     studentId: string,
     pairs: Array<{ originalEventId: string; newEventId: string }>,
@@ -767,7 +811,7 @@ export class ScheduleChangesService {
       throw new NotFoundException('Solicitud no encontrada');
     }
 
-    // Si usó comodín, devolverlo
+
     if (changeRequest.usesJoker) {
       const originalEvent = await this.eventRepository.findOne({
         where: { id: changeRequest.originalEventId },
@@ -794,9 +838,6 @@ export class ScheduleChangesService {
     return await this.changeRequestRepository.save(changeRequest);
   }
 
-  /**
-   * Obtener todas las solicitudes de cambio
-   */
   async findAllChangeRequests(
     studentId?: string,
     status?: ChangeRequestStatus,
@@ -827,9 +868,6 @@ export class ScheduleChangesService {
       .getMany();
   }
 
-  /**
-   * Obtener una solicitud de cambio
-   */
   async findOneChangeRequest(id: string) {
     const request = await this.changeRequestRepository.findOne({
       where: { id },
@@ -850,13 +888,9 @@ export class ScheduleChangesService {
     return request;
   }
 
-  /**
-   * Crear entrada en lista de espera
-   */
   async createWaitlist(createDto: CreateWaitlistDto) {
-    console.log('createWaitlist llamado con:', createDto);
-    
-    // Verificar que no exista ya una entrada PENDING para este estudiante y evento
+
+
     const existing = await this.waitlistRepository.findOne({
       where: {
         studentId: createDto.studentId,
@@ -866,11 +900,10 @@ export class ScheduleChangesService {
     });
 
     if (existing) {
-      console.log('Ya existe entrada PENDING en lista de espera:', existing.id);
       throw new ConflictException('Ya estás en la lista de espera para esta clase');
     }
 
-    // Verificar si existe con otro status (por el constraint único)
+
     const existingAnyStatus = await this.waitlistRepository.findOne({
       where: {
         studentId: createDto.studentId,
@@ -879,8 +912,7 @@ export class ScheduleChangesService {
     });
 
     if (existingAnyStatus) {
-      console.log('Ya existe entrada en lista de espera con otro status:', existingAnyStatus.id, 'Status:', existingAnyStatus.status);
-      // Si existe pero no está PENDING, actualizar a PENDING
+
       if (existingAnyStatus.status !== WaitlistStatus.PENDING) {
         existingAnyStatus.status = WaitlistStatus.PENDING;
         existingAnyStatus.requestedDate = new Date(createDto.requestedDate);
@@ -888,7 +920,6 @@ export class ScheduleChangesService {
         existingAnyStatus.notifiedAt = null;
         existingAnyStatus.registeredAt = null;
         const updated = await this.waitlistRepository.save(existingAnyStatus);
-        console.log('Entrada actualizada a PENDING:', updated.id);
         return updated;
       }
       throw new ConflictException('Ya estás en la lista de espera para esta clase');
@@ -898,7 +929,6 @@ export class ScheduleChangesService {
       where: { id: createDto.studentId },
     });
     if (!student) {
-      console.error('Estudiante no encontrado:', createDto.studentId);
       throw new NotFoundException('Estudiante no encontrado');
     }
 
@@ -910,22 +940,16 @@ export class ScheduleChangesService {
       throw new NotFoundException('Evento no encontrado');
     }
 
-    console.log('Creando nueva entrada en lista de espera...');
     const waitlist = this.waitlistRepository.create({
       ...createDto,
       requestedDate: new Date(createDto.requestedDate),
       status: WaitlistStatus.PENDING,
     });
 
-    console.log('Entidad waitlist creada:', waitlist);
     const saved = await this.waitlistRepository.save(waitlist);
-    console.log('Entrada guardada exitosamente:', saved.id);
     return saved;
   }
 
-  /**
-   * Obtener lista de espera
-   */
   async findAllWaitlist(studentId?: string, eventId?: string, status?: WaitlistStatus) {
     const query = this.waitlistRepository
       .createQueryBuilder('waitlist')
@@ -949,9 +973,6 @@ export class ScheduleChangesService {
     return await query.orderBy('waitlist.createdAt', 'ASC').getMany();
   }
 
-  /**
-   * Obtener una entrada de lista de espera por ID
-   */
   async findOneWaitlist(id: string) {
     const waitlist = await this.waitlistRepository.findOne({
       where: { id },
@@ -970,9 +991,6 @@ export class ScheduleChangesService {
     return waitlist;
   }
 
-  /**
-   * Notificar disponibilidad en lista de espera
-   */
   async notifyWaitlistAvailability(eventId: string) {
     const waitlistEntries = await this.waitlistRepository.find({
       where: {
@@ -983,7 +1001,7 @@ export class ScheduleChangesService {
       order: { createdAt: 'ASC' },
     });
 
-    // Notificar al primero en la lista
+
     if (waitlistEntries.length > 0) {
       const firstEntry = waitlistEntries[0];
       firstEntry.status = WaitlistStatus.NOTIFIED;
@@ -996,16 +1014,10 @@ export class ScheduleChangesService {
     return null;
   }
 
-  /**
-   * Obtener comodines disponibles de un estudiante
-   */
   async getStudentJokers(studentId: string, year: number, month: number) {
     return await this.getOrCreateJokers(studentId, year, month);
   }
 
-  /**
-   * Obtener studentId desde userId
-   */
   async getStudentIdByUserId(userId: string): Promise<string | null> {
     const student = await this.studentRepository.findOne({
       where: { userId },
@@ -1013,9 +1025,6 @@ export class ScheduleChangesService {
     return student?.id || null;
   }
 
-  /**
-   * Verificar disponibilidad de un evento
-   */
   private async checkAvailability(event: Event): Promise<boolean> {
     if (!event.studioId) {
       return false;
@@ -1057,10 +1066,6 @@ export class ScheduleChangesService {
     return capacity - occupied > 0;
   }
 
-  /**
-   * Actualizar attendees en eventos (nuevo array para que jsonb persista el cambio).
-   * Quitar al estudiante libera el cupo; agregarlo lo ocupa.
-   */
   private async updateEventAttendees(
     eventId: string,
     studentId: string,
@@ -1087,15 +1092,11 @@ export class ScheduleChangesService {
     await this.eventRepository.save(event);
   }
 
-  /**
-   * Procesa las bajas temporales: cancela todas las registraciones futuras
-   * de estudiantes que tienen una baja temporal aprobada cuya fecha de inicio ya llegó
-   */
   async processTemporaryLeaves() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Buscar todas las solicitudes de baja temporal aprobadas cuya fecha de inicio ya llegó
+
     const approvedLeaves = await this.changeRequestRepository.find({
       where: {
         requestType: ChangeRequestType.TEMPORARY_LEAVE,
@@ -1115,9 +1116,9 @@ export class ScheduleChangesService {
       const leaveStartDate = new Date(leave.leaveStartDate);
       leaveStartDate.setHours(0, 0, 0, 0);
 
-      // Solo procesar si la fecha de inicio ya llegó
+
       if (leaveStartDate.getTime() <= today.getTime()) {
-        // Buscar todas las registraciones futuras del estudiante (desde la fecha de inicio)
+
         const futureRegistrations = await this.registrationRepository.find({
           where: {
             studentId: leave.studentId,
@@ -1126,7 +1127,7 @@ export class ScheduleChangesService {
           relations: ['event'],
         });
 
-        // Filtrar solo las que son desde la fecha de inicio en adelante
+
         const registrationsToCancel = futureRegistrations.filter((reg) => {
           if (!reg.event?.date) return false;
           const eventDate = new Date(reg.event.date);
@@ -1134,12 +1135,12 @@ export class ScheduleChangesService {
           return eventDate.getTime() >= leaveStartDate.getTime();
         });
 
-        // Cancelar las registraciones y remover de attendees
+
         for (const registration of registrationsToCancel) {
           registration.status = RegistrationStatus.CANCELLED;
           await this.registrationRepository.save(registration);
 
-          // Remover de attendees del evento
+
           if (registration.eventId) {
             await this.updateEventAttendees(
               registration.eventId,
@@ -1151,7 +1152,7 @@ export class ScheduleChangesService {
           cancelledRegistrationsCount++;
         }
 
-        // Marcar la solicitud como completada
+
         leave.status = ChangeRequestStatus.COMPLETED;
         await this.changeRequestRepository.save(leave);
 

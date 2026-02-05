@@ -16,6 +16,7 @@ import {
 import { Student } from 'src/students/entities/student.entity';
 import { Event } from 'src/calendar/entities/event.entity';
 import { Studio } from 'src/studios/entities/studio.entity';
+import { TravelFeeBalanceService } from 'src/travel-fee-balance/travel-fee-balance.service';
 
 @Injectable()
 export class StudentClassRegistrationsService {
@@ -29,10 +30,11 @@ export class StudentClassRegistrationsService {
     @InjectRepository(Studio)
     private readonly studioRepository: Repository<Studio>,
     private readonly dataSource: DataSource,
-  ) {}
+    private readonly travelFeeBalanceService: TravelFeeBalanceService,
+  ) { }
 
   async create(createDto: CreateStudentClassRegistrationDto) {
-    // Verificar que el estudiante existe
+
     const student = await this.studentRepository.findOne({
       where: { id: createDto.studentId },
     });
@@ -40,7 +42,7 @@ export class StudentClassRegistrationsService {
       throw new NotFoundException('Estudiante no encontrado');
     }
 
-    // Verificar que el evento existe
+
     const event = await this.eventRepository.findOne({
       where: { id: createDto.eventId },
       relations: ['studio'],
@@ -49,18 +51,18 @@ export class StudentClassRegistrationsService {
       throw new NotFoundException('Evento no encontrado');
     }
 
-    // Verificar que no sea una valoración
+
     if (event.type === 'valoracion') {
       throw new BadRequestException('No se pueden registrar valoraciones como clases');
     }
 
-    // Verificar disponibilidad
+
     const isAvailable = await this.checkAvailability(event);
     if (!isAvailable) {
       throw new BadRequestException('No hay disponibilidad para esta clase');
     }
 
-    // Verificar que no exista ya un registro
+
     const existing = await this.registrationRepository.findOne({
       where: {
         studentId: createDto.studentId,
@@ -71,7 +73,7 @@ export class StudentClassRegistrationsService {
       throw new ConflictException('El estudiante ya está registrado en esta clase');
     }
 
-    // Crear el registro
+
     const registration = this.registrationRepository.create({
       ...createDto,
       currency: createDto.currency || 'MXN',
@@ -84,7 +86,7 @@ export class StudentClassRegistrationsService {
 
     const saved = await this.registrationRepository.save(registration);
 
-    // Actualizar el array de attendees en el evento
+
     await this.updateEventAttendees(event.id, student.id, 'add');
 
     return await this.findOne(saved.id);
@@ -97,7 +99,7 @@ export class StudentClassRegistrationsService {
       throw new BadRequestException('No se proporcionaron registros');
     }
 
-    // Validar que todos los registros sean del mismo estudiante
+
     const studentIds = [...new Set(registrations.map((r) => r.studentId))];
     if (studentIds.length > 1) {
       throw new BadRequestException(
@@ -108,7 +110,7 @@ export class StudentClassRegistrationsService {
     const studentId = studentIds[0];
     const eventIds = registrations.map((r) => r.eventId);
 
-    // Verificar que el estudiante existe
+
     const student = await this.studentRepository.findOne({
       where: { id: studentId },
     });
@@ -116,7 +118,7 @@ export class StudentClassRegistrationsService {
       throw new NotFoundException('Estudiante no encontrado');
     }
 
-    // Verificar que todos los eventos existen y obtenerlos
+
     const events = await this.eventRepository.find({
       where: { id: In(eventIds) },
       relations: ['studio'],
@@ -126,7 +128,7 @@ export class StudentClassRegistrationsService {
       throw new NotFoundException('Uno o más eventos no fueron encontrados');
     }
 
-    // Verificar que no haya valoraciones
+
     const valoraciones = events.filter((e) => e.type === 'valoracion');
     if (valoraciones.length > 0) {
       throw new BadRequestException(
@@ -134,7 +136,7 @@ export class StudentClassRegistrationsService {
       );
     }
 
-    // Verificar disponibilidad para todos los eventos
+
     for (const event of events) {
       const isAvailable = await this.checkAvailability(event);
       if (!isAvailable) {
@@ -144,7 +146,7 @@ export class StudentClassRegistrationsService {
       }
     }
 
-    // Verificar que no existan registros duplicados
+
     const existing = await this.registrationRepository.find({
       where: {
         studentId,
@@ -159,7 +161,7 @@ export class StudentClassRegistrationsService {
       );
     }
 
-    // Crear todos los registros en una transacción
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -184,13 +186,26 @@ export class StudentClassRegistrationsService {
         const saved = await queryRunner.manager.save(registration);
         createdRegistrations.push(saved);
 
-        // Actualizar attendees del evento
+
         await this.updateEventAttendees(event.id, studentId, 'add');
       }
 
       await queryRunner.commitTransaction();
 
-      // Retornar los registros creados con relaciones
+
+      if (createBulkDto.classesCoveredByTravelFee && createBulkDto.classesCoveredByTravelFee > 0 && createBulkDto.monthYear) {
+        try {
+          await this.travelFeeBalanceService.subtractClasses(
+            studentId,
+            createBulkDto.classesCoveredByTravelFee,
+            createBulkDto.monthYear,
+          );
+        } catch (error) {
+          console.error('Error al restar clases del balance en createBulk:', error);
+        }
+      }
+
+
       const ids = createdRegistrations.map((r) => r.id);
       return await this.registrationRepository.find({
         where: { id: In(ids) },
@@ -254,17 +269,17 @@ export class StudentClassRegistrationsService {
         statuses: [RegistrationStatus.PENDING, RegistrationStatus.CONFIRMED],
       });
 
-    // Filtrar por mes y año si se proporcionan
+
     if (month !== undefined && year !== undefined) {
-      // Crear rango de fechas para el mes
-      // month viene como 1-12, así que month - 1 es el índice del mes (0-11)
+
+
       const startDate = new Date(year, month - 1, 1);
-      // new Date(year, month, 0) da el último día del mes anterior (month - 1)
+
       const endDate = new Date(year, month, 0);
-      
+
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
-      
+
       query.andWhere('event.date >= :startDate', { startDate: startDateStr });
       query.andWhere('event.date <= :endDate', { endDate: endDateStr });
     }
@@ -309,7 +324,7 @@ export class StudentClassRegistrationsService {
   async remove(id: string) {
     const registration = await this.findOne(id);
 
-    // Actualizar el array de attendees en el evento
+
     await this.updateEventAttendees(
       registration.eventId,
       registration.studentId,
@@ -329,7 +344,7 @@ export class StudentClassRegistrationsService {
       throw new NotFoundException('No se encontraron registros');
     }
 
-    // Actualizar attendees de los eventos
+
     for (const reg of registrations) {
       await this.updateEventAttendees(reg.eventId, reg.studentId, 'remove');
     }
@@ -338,9 +353,6 @@ export class StudentClassRegistrationsService {
     return { message: `${registrations.length} registro(s) eliminado(s)` };
   }
 
-  /**
-   * Verifica la disponibilidad de camas para un evento
-   */
   private async checkAvailability(event: Event): Promise<boolean> {
     if (!event.studioId) {
       return false;
@@ -354,7 +366,7 @@ export class StudentClassRegistrationsService {
       return false;
     }
 
-    // Obtener capacidad según el tipo de clase
+
     let capacity = 0;
     switch (event.type) {
       case 'clase':
@@ -370,7 +382,7 @@ export class StudentClassRegistrationsService {
         return false;
     }
 
-    // Contar registros confirmados o pendientes para este evento
+
     const confirmedRegistrations = await this.registrationRepository.count({
       where: {
         eventId: event.id,
@@ -378,18 +390,15 @@ export class StudentClassRegistrationsService {
       },
     });
 
-    // También contar los que están en el array attendees del evento
+
     const currentAttendees = event.attendees?.length || 0;
 
-    // Usar el máximo entre los dos para asegurar consistencia
+
     const occupied = Math.max(confirmedRegistrations, currentAttendees);
 
     return capacity - occupied > 0;
   }
 
-  /**
-   * Actualiza el array de attendees en el evento
-   */
   private async updateEventAttendees(
     eventId: string,
     studentId: string,
@@ -420,9 +429,6 @@ export class StudentClassRegistrationsService {
     await this.eventRepository.save(event);
   }
 
-  /**
-   * Obtiene el período de facturación (primer día del mes) para una fecha
-   */
   private getBillingPeriod(date: Date): Date {
     return new Date(date.getFullYear(), date.getMonth(), 1);
   }

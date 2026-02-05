@@ -13,9 +13,10 @@ import { CalendarService } from 'src/calendar/calendar.service';
 import { StudentClassRegistrationsService } from 'src/student-class-registrations/student-class-registrations.service';
 import { CreateBulkStudentClassRegistrationDto } from 'src/student-class-registrations/dto/create-bulk-student-class-registration.dto';
 import { CreateStudentClassRegistrationDto } from 'src/student-class-registrations/dto/create-student-class-registration.dto';
+import { TravelFeeBalanceService } from 'src/travel-fee-balance/travel-fee-balance.service';
 
 const CLASS_PRICE = 250;
-const MONTHLY_MEMBERSHIP_RATE = 100; // Precio por mes
+const MONTHLY_MEMBERSHIP_RATE = 100;
 const TZ = 'America/Mexico_City';
 
 @Injectable()
@@ -29,7 +30,8 @@ export class StudentsService {
     private readonly calendarService: CalendarService,
     @Inject(forwardRef(() => StudentClassRegistrationsService))
     private readonly classRegistrationsService: StudentClassRegistrationsService,
-  ) {}
+    private readonly travelFeeBalanceService: TravelFeeBalanceService,
+  ) { }
 
   async create(createStudentDto: CreateStudentDto) {
     const student = this.studentRepository.create({
@@ -78,7 +80,7 @@ export class StudentsService {
       );
     }
 
-    // Mapeo de campos de ordenamiento
+
     const sortMapping: Record<string, string> = {
       nombre: 'user.name',
       name: 'user.name',
@@ -121,7 +123,7 @@ export class StudentsService {
       throw new NotFoundException(`Estudiante con id ${id} no encontrado`);
     }
 
-    // Ordenar el historial por fecha de inicio descendente
+
     if (student.statusHistory) {
       student.statusHistory.sort((a, b) => {
         return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
@@ -149,7 +151,7 @@ export class StudentsService {
       throw new NotFoundException(`Estudiante con userId ${userId} no encontrado`);
     }
 
-    // Ordenar el historial por fecha de inicio descendente
+
     if (student.statusHistory) {
       student.statusHistory.sort((a, b) => {
         return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
@@ -172,7 +174,7 @@ export class StudentsService {
   }
 
   async getStats() {
-    // Contar solo estudiantes con rol "Estudiante"
+
     const total = await this.studentRepository
       .createQueryBuilder('student')
       .leftJoin('student.user', 'user')
@@ -209,7 +211,7 @@ export class StudentsService {
     await queryRunner.startTransaction();
 
     try {
-      // Obtener el estudiante
+
       const student = await queryRunner.manager.findOne(Student, {
         where: { id: studentId },
       });
@@ -218,7 +220,7 @@ export class StudentsService {
         throw new NotFoundException(`Estudiante con id ${studentId} no encontrado`);
       }
 
-      // Buscar el registro actual activo (sin endDate)
+
       const currentStatusHistory = await queryRunner.manager.findOne(
         StudentStatusHistory,
         {
@@ -232,9 +234,9 @@ export class StudentsService {
 
       const newStartDate = changeStatusDto.startDate || new Date();
 
-      // Si hay un registro actual, cerrarlo
+
       if (currentStatusHistory) {
-        // Verificar que el nuevo estado sea diferente
+
         if (currentStatusHistory.status === changeStatusDto.status) {
           throw new BadRequestException(
             `El estudiante ya tiene el estado ${changeStatusDto.status}`,
@@ -245,7 +247,7 @@ export class StudentsService {
         await queryRunner.manager.save(StudentStatusHistory, currentStatusHistory);
       }
 
-      // Crear el nuevo registro de historial
+
       const newStatusHistory = queryRunner.manager.create(StudentStatusHistory, {
         studentId: student.id,
         status: changeStatusDto.status,
@@ -255,11 +257,11 @@ export class StudentsService {
       });
       await queryRunner.manager.save(StudentStatusHistory, newStatusHistory);
 
-      // Actualizar el estado isActive del estudiante según el nuevo status
+
       student.isActive = changeStatusDto.status === StudentStatus.ACTIVE;
       await queryRunner.manager.save(Student, student);
 
-      // Confirmar la transacción
+
       await queryRunner.commitTransaction();
 
       return {
@@ -267,67 +269,58 @@ export class StudentsService {
         statusHistory: newStatusHistory,
       };
     } catch (error) {
-      // Hacer rollback en caso de error
+
       await queryRunner.rollbackTransaction();
       throw error;
     } finally {
-      // Liberar el query runner
+
       await queryRunner.release();
     }
   }
 
-  /**
-   * Maneja la selección de clases para un estudiante
-   * Single Responsibility: Procesar la selección de clases y crear los registros correspondientes
-   */
   async selectClasses(classSelectionDto: ClassSelectionDto) {
-    const { studentId, selectedDays, selectedTime, month, year, hasAnnualMembership } = classSelectionDto;
+    const { studentId, selectedDays, selectedTime, month, year, hasAnnualMembership, classesCoveredByTravelFee } = classSelectionDto;
 
-    // Verificar que el estudiante existe
+
     const student = await this.findOne(studentId);
     if (!student) {
       throw new NotFoundException(`Estudiante con id ${studentId} no encontrado`);
     }
 
-    // Obtener todos los eventos del mes de tipo "clase" (no privada ni semiprivada)
+
     const events = await this.calendarService.findAll({
       month,
       year,
       type: 'clase',
     });
 
-    // Filtrar solo clases normales (excluir privada y semiprivada)
+
     const normalClasses = events.filter(
       (event) => event.type === 'clase'
     );
 
-    // Obtener los días del mes que coinciden con los días seleccionados
+
     const targetEvents: typeof events = [];
     const unavailableDates: string[] = [];
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 0);
 
-    console.log('=== CLASS SELECTION DEBUG ===');
-    console.log('selectedDays:', selectedDays);
-    console.log('selectedTime:', selectedTime);
-    console.log('month:', month, 'year:', year);
-    console.log('Total normalClasses found:', normalClasses.length);
-    
-    // Helper para parsear fechas correctamente (evitar problemas de zona horaria)
-    // Parsear YYYY-MM-DD directamente como fecha local (no UTC)
+
+
+
     const parseDateLocal = (dateStr: string | Date): Date => {
       if (typeof dateStr === 'string') {
-        // Parsear YYYY-MM-DD directamente como fecha local
+
         const [y, m, d] = dateStr.split('-').map(Number);
         return new Date(y, m - 1, d);
       }
-      // Si ya es Date, extraer componentes y crear nueva fecha local
+
       const y = dateStr.getFullYear();
       const m = dateStr.getMonth();
       const d = dateStr.getDate();
       return new Date(y, m, d);
     };
-    
+
     console.log('Normal classes (first 20):', normalClasses.slice(0, 20).map(ev => {
       const evDate = parseDateLocal(ev.date);
       return {
@@ -339,36 +332,36 @@ export class StudentsService {
       };
     }));
 
-    // Normalizar tiempos para comparación (eliminar espacios extra, convertir a mayúsculas)
+
     const normalizeTime = (timeStr: string) => {
       return timeStr.trim().replace(/\s+/g, ' ').toUpperCase();
     };
     const normalizedSelectedTime = normalizeTime(selectedTime);
 
     for (let day = 1; day <= monthEnd.getDate(); day++) {
-      // Calcular el día de la semana usando fecha local
+
       const date = new Date(year, month - 1, day);
-      const dayOfWeek = date.getDay(); // 0 = domingo, 1 = lunes, etc.
-      
+      const dayOfWeek = date.getDay();
+
       console.log(`\nDay ${day}: date=${year}-${month}-${day}, dayOfWeek=${dayOfWeek}, selectedDays includes ${dayOfWeek}? ${selectedDays.includes(dayOfWeek)}`);
-      
-      // selectedDays viene como 1-5 (lunes-viernes), dayOfWeek es 1-5 para lunes-viernes
-      // Solo procesar lunes-viernes (1-5)
+
+
+
       if (dayOfWeek >= 1 && dayOfWeek <= 5 && selectedDays.includes(dayOfWeek)) {
         console.log(`  ✓ Processing day ${day} (dayOfWeek: ${dayOfWeek})`);
-        
-        // Buscar todos los eventos de este día primero para debug
+
+
         const eventsOnThisDay = normalClasses.filter((ev) => {
           const evDate = parseDateLocal(ev.date);
           const evDay = evDate.getDate();
-          const evMonth = evDate.getMonth() + 1; // getMonth() devuelve 0-11
+          const evMonth = evDate.getMonth() + 1;
           const evYear = evDate.getFullYear();
-          
-          // Comparar componentes de fecha directamente
+
+
           const matches = evDay === day && evMonth === month && evYear === year;
           return matches;
         });
-        
+
         if (eventsOnThisDay.length > 0) {
           console.log(`  Events found on day ${day} (expected dayOfWeek: ${dayOfWeek}):`, eventsOnThisDay.map(ev => {
             const evDate = parseDateLocal(ev.date);
@@ -386,28 +379,28 @@ export class StudentsService {
         } else {
           console.log(`  ✗ No events found on day ${day} at all`);
         }
-        
-        // Buscar evento en este día y hora
+
+
         const eventOnDay = normalClasses.find((ev) => {
           const evDate = parseDateLocal(ev.date);
           const evDay = evDate.getDate();
-          const evMonth = evDate.getMonth() + 1; // getMonth() devuelve 0-11
+          const evMonth = evDate.getMonth() + 1;
           const evYear = evDate.getFullYear();
-          
-          // Comparar componentes de fecha directamente
+
+
           const sameDay = evDay === day && evMonth === month && evYear === year;
           const normalizedEvTime = normalizeTime(ev.time || '');
           const sameTime = normalizedEvTime === normalizedSelectedTime;
-          
+
           if (sameDay && !sameTime) {
             console.log(`  Time mismatch: event time="${ev.time}" (normalized: "${normalizedEvTime}") vs selected="${selectedTime}" (normalized: "${normalizedSelectedTime}")`);
           }
-          
+
           return sameDay && sameTime;
         });
 
         if (eventOnDay) {
-          // Verificar disponibilidad (capacidad - ocupados)
+
           const capacity = eventOnDay.studio?.capacity || 0;
           const occupied = eventOnDay.attendees?.length || 0;
           const available = capacity - occupied > 0;
@@ -428,25 +421,13 @@ export class StudentsService {
       }
     }
 
-    console.log('\n=== FINAL RESULTS ===');
-    console.log('targetEvents.length:', targetEvents.length);
-    console.log('unavailableDates:', unavailableDates);
-    console.log('targetEvents:', targetEvents.map(ev => {
-      const evDate = parseDateLocal(ev.date);
-      return {
-        id: ev.id,
-        date: ev.date,
-        time: ev.time,
-        dayOfWeek: evDate.getDay(),
-        parsedDate: `${evDate.getFullYear()}-${String(evDate.getMonth() + 1).padStart(2, '0')}-${String(evDate.getDate()).padStart(2, '0')}`
-      };
-    }));
+
 
     if (targetEvents.length === 0) {
       throw new BadRequestException('No se encontraron clases disponibles para los días seleccionados');
     }
 
-    // Verificar qué eventos ya están registrados para este estudiante
+
     const eventIds = targetEvents.map((e) => e.id);
     const existingRegistrations = await this.classRegistrationsService.findAll(
       studentId,
@@ -457,7 +438,7 @@ export class StudentsService {
       existingRegistrations.map((r) => r.eventId),
     );
 
-    // Filtrar solo los eventos que NO están ya registrados
+
     const newEvents = targetEvents.filter(
       (event) => !existingEventIds.has(event.id),
     );
@@ -468,11 +449,11 @@ export class StudentsService {
       );
     }
 
-    // Crear registros solo para las clases nuevas
+
     const registrations: CreateStudentClassRegistrationDto[] = newEvents.map((event) => ({
       studentId,
       eventId: event.id,
-      paymentModality: 'A', // Modo de pago por defecto
+      paymentModality: 'A',
       calculatedCost: CLASS_PRICE,
       currency: 'MXN',
     }));
@@ -483,21 +464,37 @@ export class StudentsService {
 
     const createdRegistrations = await this.classRegistrationsService.createBulk(bulkDto);
 
-    // Calcular precios basados solo en las clases nuevas (no las ya registradas)
+
+    if (classesCoveredByTravelFee && classesCoveredByTravelFee > 0) {
+      const monthYear = `${year}-${String(month).padStart(2, '0')}`;
+      try {
+        await this.travelFeeBalanceService.subtractClasses(
+          studentId,
+          classesCoveredByTravelFee,
+          monthYear,
+        );
+        console.log(`Balance actualizado: -${classesCoveredByTravelFee} clases para ${monthYear}`);
+      } catch (error) {
+        console.error('Error al restar clases del balance:', error);
+
+      }
+    }
+
+
     const classesPrice = newEvents.length * CLASS_PRICE;
     const membershipPrice = hasAnnualMembership
       ? this.calculateAnnualMembershipPrice(month)
       : 0;
     const totalAmount = classesPrice + membershipPrice;
 
-    // Si se pagó la membresía anual, actualizar el estudiante
+
     if (hasAnnualMembership) {
       const student = await this.studentRepository.findOne({
         where: { id: studentId },
       });
-      
+
       if (student) {
-        // Actualizar membresía: activar y establecer el año actual
+
         student.hasAnnualMembership = true;
         student.annualMembershipYear = year;
         await this.studentRepository.save(student);
@@ -506,7 +503,7 @@ export class StudentsService {
 
     return {
       success: true,
-      totalClasses: newEvents.length, // Solo contar las clases nuevas
+      totalClasses: newEvents.length,
       totalAmount,
       classesCreated: createdRegistrations.length,
       classesPrice,
@@ -514,13 +511,8 @@ export class StudentsService {
     };
   }
 
-  /**
-   * Calcula el precio de la membresía anual proporcional según el mes actual
-   * Se paga UNA VEZ al año, proporcional a los meses restantes del año
-   * Enero: $1200 (12 meses × $100), Agosto: $500 (5 meses × $100), Diciembre: $100 (1 mes × $100)
-   */
   private calculateAnnualMembershipPrice(month: number): number {
-    const monthsRemaining = 13 - month; // Meses restantes del año (Enero: 12, Agosto: 5, Diciembre: 1)
+    const monthsRemaining = 13 - month;
     return monthsRemaining * MONTHLY_MEMBERSHIP_RATE;
   }
 }

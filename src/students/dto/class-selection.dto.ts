@@ -57,4 +57,9 @@ export class ClassSelectionDto {
   @IsBoolean()
   @Type(() => Boolean)
   hasAnnualMembership: boolean;
+
+  @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
+  classesCoveredByTravelFee?: number; // Número de clases cubiertas por tarifa de viaje
 }
