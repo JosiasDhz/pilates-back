@@ -222,6 +222,7 @@ export class InstructorsService {
       sort = 'Creado',
       order = 'desc',
       search = '',
+      studioId,
     } = paginationDto;
 
     const qb = this.instructorRepository
@@ -233,6 +234,10 @@ export class InstructorsService {
       .leftJoinAndSelect('instructor.studio', 'studio')
       .take(limit)
       .skip(offset);
+
+    if (studioId) {
+      qb.andWhere('instructor.studioId = :studioId', { studioId });
+    }
 
     if (search.trim() !== '') {
       const terms = search.trim().split(/\s+/).map((t) => `%${t}%`);

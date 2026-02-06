@@ -14,6 +14,20 @@ import { UpdateStudioDto } from './dto/update-studio.dto';
 import { PaginateStudioDto } from './dto/paginate-studio.dto';
 import { FilesService } from 'src/files/files.service';
 
+const SORT_FIELD_MAP: Record<string, string> = {
+  Creado: 'studio.createdAt',
+  Nombre: 'studio.name',
+  Direccion: 'studio.address',
+  Capacidad: 'studio.capacity',
+  Status: 'studio.status',
+};
+
+const DEFAULT_SORT = 'studio.createdAt';
+const STATUS_FILTER = {
+  Activos: true,
+  Inactivos: false,
+} as const;
+
 @Injectable()
 export class StudiosService {
   constructor(
@@ -28,19 +42,56 @@ export class StudiosService {
     if (!studio?.image?.id) return;
     try {
       const fileWithUrl = await this.filesService.findOne(studio.image.id);
-      (studio as any).image = fileWithUrl;
+      (studio as Studio & { image: File | null }).image = fileWithUrl;
     } catch {
-      (studio as any).image = null;
+      (studio as Studio & { image: File | null }).image = null;
     }
   }
 
-  async create(dto: CreateStudioDto) {
-    let file: File | null = null;
-    if (dto.image) {
-      file = await this.fileRepository.findOne({ where: { id: dto.image } });
-      if (!file)
-        throw new NotFoundException(`Archivo con id ${dto.image} no encontrado`);
+  private async findWithImage(id: string): Promise<Studio | null> {
+    const studio = await this.studioRepository.findOne({
+      where: { id },
+      relations: { image: true },
+    });
+    if (studio) await this.hydrateImageUrl(studio);
+    return studio;
+  }
+
+  private async resolveImageFile(
+    imageId: string | null | undefined,
+  ): Promise<File | null> {
+    if (imageId == null || imageId === '') return null;
+    const file = await this.fileRepository.findOne({ where: { id: imageId } });
+    if (!file)
+      throw new NotFoundException(`Archivo con id ${imageId} no encontrado`);
+    return file;
+  }
+
+  private applyStatusFilter(
+    qb: ReturnType<Repository<Studio>['createQueryBuilder']>,
+    estatus: string,
+  ): void {
+    const status = estatus in STATUS_FILTER ? STATUS_FILTER[estatus as keyof typeof STATUS_FILTER] : undefined;
+    if (status !== undefined) {
+      qb.andWhere('studio.status = :status', { status });
     }
+  }
+
+  private applySearch(
+    qb: ReturnType<Repository<Studio>['createQueryBuilder']>,
+    search: string,
+  ): void {
+    const terms = search.trim().split(/\s+/).map((t) => `%${t}%`);
+    terms.forEach((term, i) => {
+      qb.andWhere(
+        `(studio.name ILIKE :term${i} OR studio.address ILIKE :term${i} OR studio.phone ILIKE :term${i})`,
+        { [`term${i}`]: term },
+      );
+    });
+  }
+
+  async create(dto: CreateStudioDto) {
+    const image = await this.resolveImageFile(dto.image ?? null);
 
     const studio = this.studioRepository.create({
       name: dto.name.trim(),
@@ -51,18 +102,14 @@ export class StudiosService {
       capacitySemiprivate: dto.capacitySemiprivate,
       capacityValoracion: dto.capacityValoracion,
       status: dto.status ?? true,
-      ...(file && { image: file }),
+      ...(image && { image }),
     });
+
     const saved = await this.studioRepository.save(studio);
-    const found = await this.studioRepository.findOne({
-      where: { id: saved.id },
-      relations: { image: true },
-    });
-    if (found) await this.hydrateImageUrl(found);
-    return found ?? saved;
+    return this.findWithImage(saved.id) ?? saved;
   }
 
-  async findAllPaginated(paginationDto: PaginateStudioDto) {
+  async findAllPaginated(dto: PaginateStudioDto) {
     const {
       limit = 10,
       offset = 0,
@@ -70,7 +117,7 @@ export class StudiosService {
       order = 'desc',
       search = '',
       estatus = 'Todos',
-    } = paginationDto;
+    } = dto;
 
     const qb = this.studioRepository
       .createQueryBuilder('studio')
@@ -78,31 +125,11 @@ export class StudiosService {
       .take(limit)
       .skip(offset);
 
-    if (estatus !== 'Todos') {
-      if (estatus === 'Activos') qb.andWhere('studio.status = :status', { status: true });
-      if (estatus === 'Inactivos') qb.andWhere('studio.status = :status', { status: false });
-    }
-
-    if (search.trim() !== '') {
-      const terms = search.trim().split(/\s+/).map((t) => `%${t}%`);
-      terms.forEach((term, i) => {
-        qb.andWhere(
-          `(studio.name ILIKE :term${i} OR studio.address ILIKE :term${i} OR studio.phone ILIKE :term${i})`,
-          { [`term${i}`]: term },
-        );
-      });
-    }
+    if (estatus !== 'Todos') this.applyStatusFilter(qb, estatus);
+    if (search.trim()) this.applySearch(qb, search);
 
     const orderDir = order === 'asc' ? 'ASC' : 'DESC';
-    const sortMap: Record<string, string> = {
-      Creado: 'studio.createdAt',
-      Nombre: 'studio.name',
-      Direccion: 'studio.address',
-      Capacidad: 'studio.capacity',
-      Status: 'studio.status',
-    };
-    const orderBy = sortMap[sort] ?? 'studio.createdAt';
-    qb.orderBy(orderBy, orderDir);
+    qb.orderBy(SORT_FIELD_MAP[sort] ?? DEFAULT_SORT, orderDir);
 
     const [records, total] = await qb.getManyAndCount();
     return { records, total };
@@ -111,17 +138,16 @@ export class StudiosService {
   async findOne(id: string) {
     if (!isUUID(id))
       throw new BadRequestException('Proporciona un UUID válido de estudio');
-    const studio = await this.studioRepository.findOne({
-      where: { id },
-      relations: { image: true },
-    });
-    if (!studio) throw new NotFoundException(`Estudio con id ${id} no encontrado`);
-    await this.hydrateImageUrl(studio);
+
+    const studio = await this.findWithImage(id);
+    if (!studio)
+      throw new NotFoundException(`Estudio con id ${id} no encontrado`);
     return studio;
   }
 
   async update(id: string, dto: UpdateStudioDto) {
     const studio = await this.findOne(id);
+
     if (dto.name != null) studio.name = dto.name.trim();
     if (dto.address !== undefined) studio.address = dto.address?.trim() ?? null;
     if (dto.phone !== undefined) studio.phone = dto.phone?.trim() ?? null;
@@ -130,25 +156,12 @@ export class StudiosService {
     if (dto.capacitySemiprivate != null) studio.capacitySemiprivate = dto.capacitySemiprivate;
     if (dto.capacityValoracion != null) studio.capacityValoracion = dto.capacityValoracion;
     if (dto.status !== undefined) studio.status = dto.status;
-
     if (dto.image !== undefined) {
-      if (!dto.image) {
-        studio.image = null;
-      } else {
-        const file = await this.fileRepository.findOne({ where: { id: dto.image } });
-        if (!file)
-          throw new NotFoundException(`Archivo con id ${dto.image} no encontrado`);
-        studio.image = file;
-      }
+      studio.image = await this.resolveImageFile(dto.image ?? null);
     }
 
     await this.studioRepository.save(studio);
-    const updated = await this.studioRepository.findOne({
-      where: { id },
-      relations: { image: true },
-    });
-    if (updated) await this.hydrateImageUrl(updated);
-    return updated ?? studio;
+    return this.findWithImage(id) ?? studio;
   }
 
   async remove(id: string) {
@@ -164,10 +177,12 @@ export class StudiosService {
       .addSelect('SUM(CASE WHEN studio.status = true THEN 1 ELSE 0 END)', 'activos')
       .addSelect('SUM(CASE WHEN studio.status = false THEN 1 ELSE 0 END)', 'inactivos')
       .getRawOne();
+
+    const parse = (v: string | undefined) => parseInt(v ?? '0', 10) || 0;
     return {
-      total: parseInt(raw?.total ?? '0', 10) || 0,
-      activos: parseInt(raw?.activos ?? '0', 10) || 0,
-      inactivos: parseInt(raw?.inactivos ?? '0', 10) || 0,
+      total: parse(raw?.total),
+      activos: parse(raw?.activos),
+      inactivos: parse(raw?.inactivos),
     };
   }
 }
